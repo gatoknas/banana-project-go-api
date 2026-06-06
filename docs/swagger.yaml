@@ -1,0 +1,356 @@
+basePath: /
+definitions:
+  handlers.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  handlers.LoginResponse:
+    properties:
+      token:
+        type: string
+    type: object
+  models.Product:
+    properties:
+      averageCost:
+        description: 'AverageCost is the dynamic weighted cost from purchases (Spanish:
+          Costo Promedio).'
+        type: number
+      categoryId:
+        description: 'CategoryID is the reference ID of the category (Spanish: ID
+          Categoría).'
+        type: integer
+      createdAt:
+        description: 'CreatedAt is the creation timestamp (Spanish: Creado En).'
+        type: string
+      description:
+        description: 'Description is the optional product description (Spanish: Descripción).'
+        type: string
+      id:
+        description: 'ID is the unique identifier (Spanish: ID).'
+        type: integer
+      isForSale:
+        description: 'IsForSale defines if it can be sold in the POS (Spanish: Es
+          Para Venta).'
+        type: boolean
+      name:
+        description: 'Name is the commercial name (Spanish: Nombre).'
+        type: string
+      requiresRecipe:
+        description: 'RequiresRecipe defines if it deducts child recipe items upon
+          sale (Spanish: Requiere Receta).'
+        type: boolean
+      sellPrice:
+        description: 'SellPrice is the price for customers, can be 0 for pure ingredients
+          (Spanish: Precio de Venta).'
+        type: number
+      unitOfMeasureId:
+        description: 'UnitOfMeasureID is the reference ID of the unit of measure (Spanish:
+          ID Unidad de Medida).'
+        type: integer
+      updatedAt:
+        description: 'UpdatedAt is the last modification timestamp (Spanish: Actualizado
+          En).'
+        type: string
+    type: object
+  service.ProductRequest:
+    properties:
+      averageCost:
+        type: number
+      categoryId:
+        type: integer
+      description:
+        type: string
+      isForSale:
+        type: boolean
+      name:
+        type: string
+      requiresRecipe:
+        type: boolean
+      sellPrice:
+        type: number
+      unitOfMeasureId:
+        type: integer
+    type: object
+  service.SaleItemRequest:
+    properties:
+      productId:
+        type: integer
+      quantity:
+        type: number
+    type: object
+  service.SaleRequest:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/service.SaleItemRequest'
+        type: array
+      paymentMethod:
+        type: string
+      totalAmount:
+        type: number
+      userId:
+        type: integer
+    type: object
+host: localhost:82
+info:
+  contact: {}
+  description: This is the API server for Banana Project.
+  title: Banana Project Go REST API
+  version: "1.0"
+paths:
+  /hello:
+    get:
+      description: Simple endpoint that returns a Hello World message in JSON format.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Hello World message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Hello World Endpoint
+      tags:
+      - system
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates a user and returns a JWT token.
+      parameters:
+      - description: User Credentials
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.LoginResponse'
+        "400":
+          description: 'Bad request: invalid JSON payload or missing username'
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: User Login
+      tags:
+      - auth
+  /products:
+    get:
+      description: Retrieves all products ordered alphabetically by name.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Product'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: List products
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      description: Creates a new product in the catalog and initializes its inventory
+        to zero.
+      parameters:
+      - description: Product Creation Payload
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/service.ProductRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 'Bad request: invalid JSON payload or missing name'
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Create a new product
+      tags:
+      - products
+  /products/{id}:
+    delete:
+      description: Deletes a product along with all associated inventory, recipe entries,
+        and allowed additions.
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 'Bad request: invalid ID'
+          schema:
+            type: string
+        "404":
+          description: Product not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Delete a product
+      tags:
+      - products
+    get:
+      description: Retrieves detailed information of a single product.
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Product'
+        "400":
+          description: 'Bad request: invalid product ID'
+          schema:
+            type: string
+        "404":
+          description: Product not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Get a product by ID
+      tags:
+      - products
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing product's fields.
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Product Update Payload
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/service.ProductRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 'Bad request: invalid ID or invalid JSON payload or missing
+            name'
+          schema:
+            type: string
+        "404":
+          description: Product not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Update a product
+      tags:
+      - products
+  /sales:
+    post:
+      consumes:
+      - application/json
+      description: Registers a new sale, deducts product or recipe ingredient inventory,
+        and records details.
+      parameters:
+      - description: Sale Creation Payload
+        in: body
+        name: sale
+        required: true
+        schema:
+          $ref: '#/definitions/service.SaleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 'Bad request: invalid JSON payload or sale must have at least
+            one item'
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Create a new sale
+      tags:
+      - sales
+  /status:
+    get:
+      description: Checks if the API is running and verifies connection to the database.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Status OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: System Health Status
+      tags:
+      - system
+swagger: "2.0"
