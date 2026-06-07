@@ -1,0 +1,21 @@
+# Exclude local builds and binaries
+*.exe
+api
+api.exe
+bin/
+
+# Exclude environment files containing secrets
+.env
+.env.local
+
+# Exclude Git configurations
+.git
+.gitignore
+
+# Exclude agent / developer configurations
+.agents/
+.vscode/
+
+# Exclude temp directories
+tmp/
+.gemini/

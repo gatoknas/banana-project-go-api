@@ -94,7 +94,7 @@ definitions:
       userId:
         type: integer
     type: object
-host: localhost:82
+host: localhost:8082
 info:
   contact: {}
   description: This is the API server for Banana Project.
