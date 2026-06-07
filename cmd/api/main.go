@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	_ "org.banana.project/api/docs"
+	"org.banana.project/api/internal/auth"
 	"org.banana.project/api/internal/database"
 	"org.banana.project/api/internal/handlers"
 	"org.banana.project/api/internal/middleware"
@@ -67,6 +69,7 @@ func main() {
 		logger.Warn("Failed to connect to database", zap.Error(err))
 	} else {
 		logger.Info("Successfully connected to the database")
+		seedDefaultAdmin(database.DB, logger)
 		defer func() {
 			if err := database.Close(); err != nil {
 				logger.Error("Error closing database", zap.Error(err))
@@ -109,14 +112,20 @@ func initLogger(env string) (*zap.Logger, error) {
 func setupRouter(logger *zap.Logger) http.Handler {
 	mux := http.NewServeMux()
 
+	// Wire user dependencies
+	userRepo := repository.NewSQLUserRepository(database.DB)
+	userService := service.NewUserService(userRepo, database.DB)
+	userHandler := handlers.NewUserHandler(userService, logger)
+
 	// Instantiate handlers with dependencies
-	authHandler := handlers.NewAuthHandler(logger)
+	authHandler := handlers.NewAuthHandler(userService, logger)
 	healthHandler := handlers.NewHealthHandler(logger, database.DB)
 	helloHandler := handlers.NewHelloHandler(logger)
 
 	// Public endpoints
 	mux.HandleFunc("GET /status", healthHandler.Health)
 	mux.HandleFunc("GET /hello", helloHandler.Hello)
+	mux.HandleFunc("GET /hello/logo.png", helloHandler.Logo)
 	mux.HandleFunc("POST /login", authHandler.Login)
 
 	// API Documentation (Scalar UI)
@@ -149,23 +158,34 @@ func setupRouter(logger *zap.Logger) http.Handler {
 	// For Go 1.22+, we create a handler for the sub-route and wrap it in middleware
 	protectedMux := http.NewServeMux()
 
+	// Define RBAC role groups
+	adminOnly := middleware.RequireRoles("ayurami-admin")
+	salesAndAdmin := middleware.RequireRoles("ayurami-admin", "ayurami-salesperson")
+
+	// User CRUD endpoints (Admin only)
+	protectedMux.Handle("POST /users", adminOnly(http.HandlerFunc(userHandler.Create)))
+	protectedMux.Handle("GET /users", adminOnly(http.HandlerFunc(userHandler.List)))
+	protectedMux.Handle("GET /users/{id}", adminOnly(http.HandlerFunc(userHandler.Get)))
+	protectedMux.Handle("PUT /users/{id}", adminOnly(http.HandlerFunc(userHandler.Update)))
+	protectedMux.Handle("DELETE /users/{id}", adminOnly(http.HandlerFunc(userHandler.Delete)))
+
 	// Wire sale dependencies
 	saleRepo := repository.NewSQLSaleRepository(database.DB)
 	saleService := service.NewSaleService(saleRepo, database.DB)
 	saleHandler := handlers.NewSaleHandler(saleService, logger)
 
-	protectedMux.HandleFunc("POST /sales", saleHandler.Create)
+	protectedMux.Handle("POST /sales", salesAndAdmin(http.HandlerFunc(saleHandler.Create)))
 
 	// Wire product dependencies
 	productRepo := repository.NewSQLProductRepository(database.DB)
 	productService := service.NewProductService(productRepo, database.DB)
 	productHandler := handlers.NewProductHandler(productService, logger)
 
-	protectedMux.HandleFunc("POST /products", productHandler.Create)
-	protectedMux.HandleFunc("GET /products", productHandler.List)
-	protectedMux.HandleFunc("GET /products/{id}", productHandler.Get)
-	protectedMux.HandleFunc("PUT /products/{id}", productHandler.Update)
-	protectedMux.HandleFunc("DELETE /products/{id}", productHandler.Delete)
+	protectedMux.Handle("POST /products", adminOnly(http.HandlerFunc(productHandler.Create)))
+	protectedMux.Handle("GET /products", salesAndAdmin(http.HandlerFunc(productHandler.List)))
+	protectedMux.Handle("GET /products/{id}", salesAndAdmin(http.HandlerFunc(productHandler.Get)))
+	protectedMux.Handle("PUT /products/{id}", adminOnly(http.HandlerFunc(productHandler.Update)))
+	protectedMux.Handle("DELETE /products/{id}", adminOnly(http.HandlerFunc(productHandler.Delete)))
 
 	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", middleware.RequireAuth(protectedMux)))
 
@@ -198,5 +218,36 @@ func printBanner(env, port string) {
 	)
 
 	fmt.Println(boxStyle.Render(content))
+}
+
+// seedDefaultAdmin checks if the users table is empty and inserts a default admin user
+func seedDefaultAdmin(db *sql.DB, logger *zap.Logger) {
+	var count int
+	// Verify table exists first (if database has not run migrations yet it could error)
+	err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+	if err != nil {
+		logger.Warn("Skipped seeding admin user (users table might not exist yet)", zap.Error(err))
+		return
+	}
+
+	if count == 0 {
+		logger.Info("No users found in database. Seeding default admin user...")
+		hash, err := auth.HashPassword("adminpassword")
+		if err != nil {
+			logger.Error("Failed to hash default admin password", zap.Error(err))
+			return
+		}
+
+		_, err = db.Exec(
+			`INSERT INTO users (full_name, username, password_hash, role, is_active) 
+			 VALUES ($1, $2, $3, $4, $5)`,
+			"Admin Ayurami", "admin", hash, "ayurami-admin", true,
+		)
+		if err != nil {
+			logger.Error("Failed to seed default admin user", zap.Error(err))
+			return
+		}
+		logger.Info("Successfully seeded default admin user (username: admin, password: adminpassword)")
+	}
 }
 
