@@ -22,12 +22,16 @@ func RequireAuth(next http.Handler) http.Handler {
 		}
 
 		tokenString := parts[1]
-		token, err := auth.ValidateToken(tokenString)
+		claims, err := auth.ValidateToken(tokenString)
 
-		if err != nil || !token.Valid {
+		if err != nil {
 			http.Error(w, "Unauthorized: invalid token", http.StatusUnauthorized)
 			return
 		}
+
+		// Inject claims into request context using the helper
+		ctx := auth.WithAyuramiUser(r.Context(), claims)
+		r = r.WithContext(ctx)
 
 		// Proceed to next handler
 		next.ServeHTTP(w, r)

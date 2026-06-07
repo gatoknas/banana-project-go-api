@@ -55,6 +55,28 @@ definitions:
           En).'
         type: string
     type: object
+  models.User:
+    properties:
+      createdAt:
+        description: 'CreatedAt is the registration timestamp (Spanish: Creado En).'
+        type: string
+      fullName:
+        description: 'FullName is the operator''s real name (Spanish: Nombre Completo).'
+        type: string
+      id:
+        description: 'ID is the unique identifier (Spanish: ID).'
+        type: integer
+      isActive:
+        description: 'IsActive defines if the user account is enabled (Spanish: Activo).'
+        type: boolean
+      role:
+        description: 'Role is the authorization role (e.g. Administrator, Cajero)
+          (Spanish: Rol).'
+        type: string
+      username:
+        description: 'Username is the login identifier (Spanish: Nombre de Usuario).'
+        type: string
+    type: object
   service.ProductRequest:
     properties:
       averageCost:
@@ -93,6 +115,19 @@ definitions:
         type: number
       userId:
         type: integer
+    type: object
+  service.UserRequest:
+    properties:
+      fullName:
+        type: string
+      isActive:
+        type: boolean
+      password:
+        type: string
+      role:
+        type: string
+      username:
+        type: string
     type: object
 host: localhost:8082
 info:
@@ -137,6 +172,14 @@ paths:
             $ref: '#/definitions/handlers.LoginResponse'
         "400":
           description: 'Bad request: invalid JSON payload or missing username'
+          schema:
+            type: string
+        "401":
+          description: 'Unauthorized: invalid credentials'
+          schema:
+            type: string
+        "403":
+          description: 'Forbidden: account is inactive'
           schema:
             type: string
         "500":
@@ -353,4 +396,155 @@ paths:
       summary: System Health Status
       tags:
       - system
+  /users:
+    get:
+      description: Retrieves all registered users ordered alphabetically by name.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.User'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: List users
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: Creates a new system user (admin or salesperson) with a secure
+        hashed password.
+      parameters:
+      - description: User Creation Payload
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/service.UserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Create a new user
+      tags:
+      - users
+  /users/{id}:
+    delete:
+      description: Deletes a user from the system.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "404":
+          description: User not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Delete user
+      tags:
+      - users
+    get:
+      description: Retrieves detailed user profile information.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "404":
+          description: User not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Get user by ID
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Updates a user's role, password, fullName, or status.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: User Update Payload
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/service.UserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "404":
+          description: User not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Update user
+      tags:
+      - users
 swagger: "2.0"
