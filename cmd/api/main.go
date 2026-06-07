@@ -22,7 +22,7 @@ import (
 // @title           Banana Project Go REST API
 // @version         1.0
 // @description     This is the API server for Banana Project.
-// @host            localhost:82
+// @host            localhost:8082
 // @BasePath        /
 
 func main() {
@@ -67,7 +67,13 @@ func main() {
 	// Setup Router
 	router := setupRouter(logger)
 
-	port := ":82"
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8082"
+	}
+	if len(port) > 0 && port[0] != ':' {
+		port = ":" + port
+	}
 
 	// Print Startup Banner
 	printBanner(env, port)
