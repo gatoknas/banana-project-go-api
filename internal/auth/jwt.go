@@ -1,12 +1,15 @@
 package auth
 
 import (
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var SecretKey = []byte("my-super-secret-key-change-in-production")
+func getSecretKey() []byte {
+	return []byte(os.Getenv("JWT_SECRET"))
+}
 
 func GenerateToken(username string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -14,7 +17,7 @@ func GenerateToken(username string) (string, error) {
 		"exp":      time.Now().Add(time.Hour * 24).Unix(),
 	})
 
-	tokenString, err := token.SignedString(SecretKey)
+	tokenString, err := token.SignedString(getSecretKey())
 	if err != nil {
 		return "", err
 	}
@@ -28,6 +31,6 @@ func ValidateToken(tokenString string) (*jwt.Token, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, jwt.ErrSignatureInvalid
 		}
-		return SecretKey, nil
+		return getSecretKey(), nil
 	})
 }
