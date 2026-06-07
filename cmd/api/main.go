@@ -47,10 +47,20 @@ func main() {
 		logger.Info("No .env file found, relying on environment variables")
 	}
 
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		logger.Fatal("DATABASE_URL environment variable is not set")
+	// Validate required environment variables
+	requiredEnvVars := []string{"DATABASE_URL", "JWT_SECRET"}
+	missingVars := false
+	for _, envVar := range requiredEnvVars {
+		if os.Getenv(envVar) == "" {
+			logger.Error("Missing required environment variable", zap.String("variable", envVar))
+			missingVars = true
+		}
 	}
+	if missingVars {
+		logger.Fatal("Application failed to start due to missing environment variables")
+	}
+
+	dbURL := os.Getenv("DATABASE_URL")
 
 	// Initialize Database
 	if err := database.Init(dbURL); err != nil {
