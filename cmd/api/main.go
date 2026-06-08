@@ -92,7 +92,8 @@ func main() {
 	printBanner(env, port)
 
 	logger.Info("Server is starting", zap.String("port", port), zap.String("env", env))
-	if err := http.ListenAndServe(port, router); err != nil {
+	corsRouter := middleware.CORS(router)
+	if err := http.ListenAndServe(port, corsRouter); err != nil {
 		logger.Fatal("Could not start server", zap.Error(err))
 	}
 }
