@@ -1,0 +1,16 @@
+{
+  "secret-guard": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python ./scripts/secret_scanner.py --hook",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

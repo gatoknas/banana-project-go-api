@@ -9,7 +9,112 @@ definitions:
     type: object
   handlers.LoginResponse:
     properties:
+      refreshToken:
+        type: string
       token:
+        type: string
+    type: object
+  handlers.MessageResponse:
+    properties:
+      id:
+        type: integer
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+  handlers.RefreshRequest:
+    properties:
+      refreshToken:
+        type: string
+    type: object
+  handlers.SaleResponse:
+    properties:
+      message:
+        type: string
+      saleId:
+        type: integer
+      status:
+        type: string
+    type: object
+  handlers.SyncResponse:
+    properties:
+      message:
+        type: string
+      result:
+        $ref: '#/definitions/service.SyncResult'
+      status:
+        type: string
+    type: object
+  models.Category:
+    properties:
+      createdAt:
+        description: 'CreatedAt is the timestamp when the category was created (Spanish:
+          Creado En).'
+        type: string
+      id:
+        description: 'ID is the unique identifier (Spanish: ID).'
+        type: integer
+      name:
+        description: 'Name is the category name (Spanish: Nombre).'
+        type: string
+    type: object
+  models.EmailReceipt:
+    properties:
+      amount:
+        description: 'Amount is the payment amount (Spanish: Monto).'
+        type: number
+      bank:
+        description: 'Bank is the originating bank (Spanish: Banco).'
+        type: string
+      createdAt:
+        description: 'CreatedAt is the ingestion timestamp (Spanish: Creado En).'
+        type: string
+      currency:
+        description: 'Currency is the ISO currency code (Spanish: Moneda).'
+        type: string
+      id:
+        description: 'ID is the unique identifier (Spanish: ID).'
+        type: integer
+      messageId:
+        description: 'MessageID is the source email message id; unique and used for
+          idempotent ingestion (Spanish: ID Mensaje).'
+        type: string
+      parseError:
+        description: 'ParseError holds the parsing failure message when Status is
+          error (Spanish: Error de Parseo).'
+        type: string
+      payer:
+        description: 'Payer is the person/entity that paid (Spanish: Pagador).'
+        type: string
+      paymentMethod:
+        description: 'PaymentMethod is the payment method label (e.g. QR Negocios
+          Bre-B) (Spanish: Método de Pago).'
+        type: string
+      receivedAt:
+        description: 'ReceivedAt is when the inbox received the email (Spanish: Recibido
+          En).'
+        type: string
+      reference:
+        description: 'Reference is the bank reference code (Spanish: Referencia).'
+        type: string
+      sender:
+        description: 'Sender is the email sender address (Spanish: Remitente).'
+        type: string
+      status:
+        description: 'Status is the ingestion status: imported or error (Spanish:
+          Estado).'
+        type: string
+      subject:
+        description: 'Subject is the email subject line (Spanish: Asunto).'
+        type: string
+      transactionDate:
+        description: 'TransactionDate is the date/time of the payment as reported
+          in the receipt body (Spanish: Fecha de Transacción).'
+        type: string
+      transactionNumber:
+        description: 'TransactionNumber is the unique transaction id from the bank
+          (Spanish: Número de Transacción).'
         type: string
     type: object
   models.Product:
@@ -77,6 +182,13 @@ definitions:
         description: 'Username is the login identifier (Spanish: Nombre de Usuario).'
         type: string
     type: object
+  service.EmailReceiptSyncRequest:
+    properties:
+      from:
+        type: string
+      to:
+        type: string
+    type: object
   service.ProductRequest:
     properties:
       averageCost:
@@ -116,6 +228,17 @@ definitions:
       userId:
         type: integer
     type: object
+  service.SyncResult:
+    properties:
+      errors:
+        type: integer
+      fetched:
+        type: integer
+      imported:
+        type: integer
+      skipped:
+        type: integer
+    type: object
   service.UserRequest:
     properties:
       fullName:
@@ -136,19 +259,479 @@ info:
   title: Banana Project Go REST API
   version: "1.0"
 paths:
-  /hello:
+  /api/v1/categories:
     get:
-      description: Simple endpoint that returns a Hello World message in JSON format.
+      description: Retrieves all product categories ordered by ID. Requires the ayurami-admin
+        or ayurami-salesperson role.
       produces:
       - application/json
       responses:
         "200":
-          description: Hello World message
+          description: OK
           schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Hello World Endpoint
+            items:
+              $ref: '#/definitions/models.Category'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List product categories
+      tags:
+      - categories
+  /api/v1/email-receipts:
+    get:
+      description: Retrieves stored bank receipts, optionally filtered by a received_at
+        date range. Requires the ayurami-admin or ayurami-salesperson role.
+      parameters:
+      - description: Start date (YYYY-MM-DD, inclusive)
+        in: query
+        name: from
+        type: string
+      - description: End date (YYYY-MM-DD, inclusive)
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.EmailReceipt'
+            type: array
+        "400":
+          description: 'Bad request: invalid date'
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List stored email receipts
+      tags:
+      - email-receipts
+  /api/v1/email-receipts/sync:
+    post:
+      consumes:
+      - application/json
+      description: Reads receipt emails from the configured Gmail inbox for a date
+        range and stores the sale details. Requires the ayurami-admin role.
+      parameters:
+      - description: Date range (from/to as YYYY-MM-DD)
+        in: body
+        name: range
+        required: true
+        schema:
+          $ref: '#/definitions/service.EmailReceiptSyncRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.SyncResponse'
+        "400":
+          description: 'Bad request: invalid JSON payload or date range'
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Sync bank receipts from the email inbox
+      tags:
+      - email-receipts
+  /api/v1/products:
+    get:
+      description: Retrieves all products ordered alphabetically by name. Requires
+        the ayurami-admin or ayurami-salesperson role.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Product'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List products
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      description: Creates a new product in the catalog and initializes its inventory
+        to zero. Requires the ayurami-admin role.
+      parameters:
+      - description: Product Creation Payload
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/service.ProductRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.MessageResponse'
+        "400":
+          description: 'Bad request: invalid JSON payload or missing name'
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Create a new product
+      tags:
+      - products
+  /api/v1/products/{id}:
+    delete:
+      description: Deletes a product along with all associated inventory, recipe entries,
+        and allowed additions. Requires the ayurami-admin role.
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.MessageResponse'
+        "400":
+          description: 'Bad request: invalid ID'
+          schema:
+            type: string
+        "404":
+          description: Product not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Delete a product
+      tags:
+      - products
+    get:
+      description: Retrieves detailed information of a single product. Requires the
+        ayurami-admin or ayurami-salesperson role.
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Product'
+        "400":
+          description: 'Bad request: invalid product ID'
+          schema:
+            type: string
+        "404":
+          description: Product not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get a product by ID
+      tags:
+      - products
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing product's fields. Requires the ayurami-admin
+        role.
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Product Update Payload
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/service.ProductRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.MessageResponse'
+        "400":
+          description: 'Bad request: invalid ID or invalid JSON payload or missing
+            name'
+          schema:
+            type: string
+        "404":
+          description: Product not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Update a product
+      tags:
+      - products
+  /api/v1/sales:
+    post:
+      consumes:
+      - application/json
+      description: Registers a new sale, deducts product or recipe ingredient inventory,
+        and records details. Requires the ayurami-admin or ayurami-salesperson role.
+      parameters:
+      - description: Sale Creation Payload
+        in: body
+        name: sale
+        required: true
+        schema:
+          $ref: '#/definitions/service.SaleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.SaleResponse'
+        "400":
+          description: 'Bad request: invalid JSON payload or sale must have at least
+            one item'
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Create a new sale
+      tags:
+      - sales
+  /api/v1/users:
+    get:
+      description: Retrieves all registered users ordered alphabetically by name.
+        Requires the ayurami-admin role.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.User'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List users
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: Creates a new system user (admin or salesperson) with a secure
+        hashed password. Requires the ayurami-admin role.
+      parameters:
+      - description: User Creation Payload
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/service.UserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.MessageResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Create a new user
+      tags:
+      - users
+  /api/v1/users/{id}:
+    delete:
+      description: Deletes a user from the system. Requires the ayurami-admin role.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.MessageResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "404":
+          description: User not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Delete user
+      tags:
+      - users
+    get:
+      description: Retrieves detailed user profile information. Requires the ayurami-admin
+        role.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "404":
+          description: User not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get user by ID
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Updates a user's role, password, fullName, or status. Requires
+        the ayurami-admin role.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: User Update Payload
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/service.UserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.MessageResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "404":
+          description: User not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Update user
+      tags:
+      - users
+  /hello:
+    get:
+      description: Returns a simple web page with the centered logo and "hecho en
+        Colombia" footer.
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: HTML page
+          schema:
+            type: string
+      summary: Hello Endpoint Web Page
+      tags:
+      - system
+  /hello/logo.png:
+    get:
+      description: Returns the embedded Ayurami logo image bytes.
+      produces:
+      - image/png
+      responses:
+        "200":
+          description: logo image bytes
+          schema:
+            type: string
+      summary: Logo image
       tags:
       - system
   /login:
@@ -189,192 +772,36 @@ paths:
       summary: User Login
       tags:
       - auth
-  /products:
-    get:
-      description: Retrieves all products ordered alphabetically by name.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/models.Product'
-            type: array
-        "500":
-          description: Internal server error
-          schema:
-            type: string
-      summary: List products
-      tags:
-      - products
+  /refresh:
     post:
       consumes:
       - application/json
-      description: Creates a new product in the catalog and initializes its inventory
-        to zero.
+      description: Generates a new token pair using a valid refresh token.
       parameters:
-      - description: Product Creation Payload
+      - description: Refresh Token
         in: body
-        name: product
+        name: credentials
         required: true
         schema:
-          $ref: '#/definitions/service.ProductRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 'Bad request: invalid JSON payload or missing name'
-          schema:
-            type: string
-        "500":
-          description: Internal server error
-          schema:
-            type: string
-      summary: Create a new product
-      tags:
-      - products
-  /products/{id}:
-    delete:
-      description: Deletes a product along with all associated inventory, recipe entries,
-        and allowed additions.
-      parameters:
-      - description: Product ID
-        in: path
-        name: id
-        required: true
-        type: integer
+          $ref: '#/definitions/handlers.RefreshRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/handlers.LoginResponse'
         "400":
-          description: 'Bad request: invalid ID'
+          description: Bad request
           schema:
             type: string
-        "404":
-          description: Product not found
+        "401":
+          description: 'Unauthorized: invalid refresh token'
           schema:
             type: string
-        "500":
-          description: Internal server error
-          schema:
-            type: string
-      summary: Delete a product
+      summary: Refresh JWT Token
       tags:
-      - products
-    get:
-      description: Retrieves detailed information of a single product.
-      parameters:
-      - description: Product ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Product'
-        "400":
-          description: 'Bad request: invalid product ID'
-          schema:
-            type: string
-        "404":
-          description: Product not found
-          schema:
-            type: string
-        "500":
-          description: Internal server error
-          schema:
-            type: string
-      summary: Get a product by ID
-      tags:
-      - products
-    put:
-      consumes:
-      - application/json
-      description: Updates an existing product's fields.
-      parameters:
-      - description: Product ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Product Update Payload
-        in: body
-        name: product
-        required: true
-        schema:
-          $ref: '#/definitions/service.ProductRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 'Bad request: invalid ID or invalid JSON payload or missing
-            name'
-          schema:
-            type: string
-        "404":
-          description: Product not found
-          schema:
-            type: string
-        "500":
-          description: Internal server error
-          schema:
-            type: string
-      summary: Update a product
-      tags:
-      - products
-  /sales:
-    post:
-      consumes:
-      - application/json
-      description: Registers a new sale, deducts product or recipe ingredient inventory,
-        and records details.
-      parameters:
-      - description: Sale Creation Payload
-        in: body
-        name: sale
-        required: true
-        schema:
-          $ref: '#/definitions/service.SaleRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 'Bad request: invalid JSON payload or sale must have at least
-            one item'
-          schema:
-            type: string
-        "500":
-          description: Internal server error
-          schema:
-            type: string
-      summary: Create a new sale
-      tags:
-      - sales
+      - auth
   /status:
     get:
       description: Checks if the API is running and verifies connection to the database.
@@ -396,155 +823,10 @@ paths:
       summary: System Health Status
       tags:
       - system
-  /users:
-    get:
-      description: Retrieves all registered users ordered alphabetically by name.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/models.User'
-            type: array
-        "500":
-          description: Internal server error
-          schema:
-            type: string
-      summary: List users
-      tags:
-      - users
-    post:
-      consumes:
-      - application/json
-      description: Creates a new system user (admin or salesperson) with a secure
-        hashed password.
-      parameters:
-      - description: User Creation Payload
-        in: body
-        name: user
-        required: true
-        schema:
-          $ref: '#/definitions/service.UserRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad request
-          schema:
-            type: string
-        "500":
-          description: Internal server error
-          schema:
-            type: string
-      summary: Create a new user
-      tags:
-      - users
-  /users/{id}:
-    delete:
-      description: Deletes a user from the system.
-      parameters:
-      - description: User ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad request
-          schema:
-            type: string
-        "404":
-          description: User not found
-          schema:
-            type: string
-        "500":
-          description: Internal server error
-          schema:
-            type: string
-      summary: Delete user
-      tags:
-      - users
-    get:
-      description: Retrieves detailed user profile information.
-      parameters:
-      - description: User ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.User'
-        "400":
-          description: Bad request
-          schema:
-            type: string
-        "404":
-          description: User not found
-          schema:
-            type: string
-        "500":
-          description: Internal server error
-          schema:
-            type: string
-      summary: Get user by ID
-      tags:
-      - users
-    put:
-      consumes:
-      - application/json
-      description: Updates a user's role, password, fullName, or status.
-      parameters:
-      - description: User ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: User Update Payload
-        in: body
-        name: user
-        required: true
-        schema:
-          $ref: '#/definitions/service.UserRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad request
-          schema:
-            type: string
-        "404":
-          description: User not found
-          schema:
-            type: string
-        "500":
-          description: Internal server error
-          schema:
-            type: string
-      summary: Update user
-      tags:
-      - users
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer " followed by the JWT obtained from POST /login.
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

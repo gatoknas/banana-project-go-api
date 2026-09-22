@@ -8,6 +8,7 @@ DROP VIEW IF EXISTS v_full_catalog;
 DROP TABLE IF EXISTS addition_details;
 DROP TABLE IF EXISTS sale_details;
 DROP TABLE IF EXISTS sales;
+DROP TABLE IF EXISTS email_receipts;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS purchase_details;
 DROP TABLE IF EXISTS purchases;
@@ -198,6 +199,28 @@ CREATE TABLE addition_details (
     CONSTRAINT fk_addition_details_product FOREIGN KEY (addition_product_id) REFERENCES products(id)
 );
 
+-- email_receipts (Spanish: recibos_correo)
+-- Bank/PSP payment receipts ingested from a Gmail inbox (e.g. Nequi Bre-B).
+CREATE TABLE email_receipts (
+    id SERIAL PRIMARY KEY,
+    message_id VARCHAR(255) NOT NULL UNIQUE, -- Gmail message id, used for idempotent upserts
+    sender VARCHAR(255),
+    subject TEXT,
+    received_at TIMESTAMPTZ,
+    transaction_date TIMESTAMPTZ,
+    amount DECIMAL(12, 2),
+    currency VARCHAR(10) DEFAULT 'COP',
+    payer VARCHAR(255),
+    bank VARCHAR(100),
+    reference VARCHAR(255),
+    transaction_number VARCHAR(255),
+    payment_method VARCHAR(100),
+    status VARCHAR(20) NOT NULL DEFAULT 'imported', -- imported / error
+    parse_error TEXT,
+    raw_body TEXT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
 -- =============================================================================
 -- VIEWS
 -- =============================================================================
@@ -247,3 +270,5 @@ CREATE INDEX idx_products_created_at ON products (created_at);
 CREATE INDEX idx_purchase_details_product_id ON purchase_details (product_id);
 CREATE INDEX idx_sales_sale_date ON sales (sale_date);
 CREATE INDEX idx_suppliers_company_name ON suppliers (company_name);
+CREATE INDEX idx_email_receipts_received_at ON email_receipts (received_at);
+CREATE INDEX idx_email_receipts_transaction_date ON email_receipts (transaction_date);

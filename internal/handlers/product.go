@@ -25,15 +25,16 @@ func NewProductHandler(s *service.ProductService, logger *zap.Logger) *ProductHa
 
 // Create handles POST /api/v1/products
 // @Summary      Create a new product
-// @Description  Creates a new product in the catalog and initializes its inventory to zero.
+// @Description  Creates a new product in the catalog and initializes its inventory to zero. Requires the ayurami-admin role.
 // @Tags         products
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        product  body      service.ProductRequest  true  "Product Creation Payload"
-// @Success      201      {object}  map[string]interface{}
+// @Success      201      {object}  handlers.MessageResponse
 // @Failure      400      {string}  string "Bad request: invalid JSON payload or missing name"
 // @Failure      500      {string}  string "Internal server error"
-// @Router       /products [post]
+// @Router       /api/v1/products [post]
 func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var req service.ProductRequest
@@ -57,10 +58,10 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":  "success",
-		"message": "Product created successfully",
-		"id":      id,
+	if err := json.NewEncoder(w).Encode(MessageResponse{
+		Status:  "success",
+		Message: "Product created successfully",
+		ID:      id,
 	}); err != nil {
 		h.logger.Error("failed to encode product creation response", zap.Error(err))
 	}
@@ -68,12 +69,13 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // List handles GET /api/v1/products
 // @Summary      List products
-// @Description  Retrieves all products ordered alphabetically by name.
+// @Description  Retrieves all products ordered alphabetically by name. Requires the ayurami-admin or ayurami-salesperson role.
 // @Tags         products
 // @Produce      json
+// @Security     BearerAuth
 // @Success      200      {array}   models.Product
 // @Failure      500      {string}  string "Internal server error"
-// @Router       /products [get]
+// @Router       /api/v1/products [get]
 func (h *ProductHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	products, err := h.service.ListProducts(ctx)
@@ -91,15 +93,16 @@ func (h *ProductHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // Get handles GET /api/v1/products/{id}
 // @Summary      Get a product by ID
-// @Description  Retrieves detailed information of a single product.
+// @Description  Retrieves detailed information of a single product. Requires the ayurami-admin or ayurami-salesperson role.
 // @Tags         products
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id       path      int  true  "Product ID"
 // @Success      200      {object}  models.Product
 // @Failure      400      {string}  string "Bad request: invalid product ID"
 // @Failure      404      {string}  string "Product not found"
 // @Failure      500      {string}  string "Internal server error"
-// @Router       /products/{id} [get]
+// @Router       /api/v1/products/{id} [get]
 func (h *ProductHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	idStr := r.PathValue("id")
@@ -129,17 +132,18 @@ func (h *ProductHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // Update handles PUT /api/v1/products/{id}
 // @Summary      Update a product
-// @Description  Updates an existing product's fields.
+// @Description  Updates an existing product's fields. Requires the ayurami-admin role.
 // @Tags         products
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id       path      int             true  "Product ID"
 // @Param        product  body      service.ProductRequest  true  "Product Update Payload"
-// @Success      200      {object}  map[string]interface{}
+// @Success      200      {object}  handlers.MessageResponse
 // @Failure      400      {string}  string "Bad request: invalid ID or invalid JSON payload or missing name"
 // @Failure      404      {string}  string "Product not found"
 // @Failure      500      {string}  string "Internal server error"
-// @Router       /products/{id} [put]
+// @Router       /api/v1/products/{id} [put]
 func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	idStr := r.PathValue("id")
@@ -174,9 +178,9 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":  "success",
-		"message": "Product updated successfully",
+	if err := json.NewEncoder(w).Encode(MessageResponse{
+		Status:  "success",
+		Message: "Product updated successfully",
 	}); err != nil {
 		h.logger.Error("failed to encode product update response", zap.Error(err))
 	}
@@ -184,15 +188,16 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete handles DELETE /api/v1/products/{id}
 // @Summary      Delete a product
-// @Description  Deletes a product along with all associated inventory, recipe entries, and allowed additions.
+// @Description  Deletes a product along with all associated inventory, recipe entries, and allowed additions. Requires the ayurami-admin role.
 // @Tags         products
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id       path      int  true  "Product ID"
-// @Success      200      {object}  map[string]interface{}
+// @Success      200      {object}  handlers.MessageResponse
 // @Failure      400      {string}  string "Bad request: invalid ID"
 // @Failure      404      {string}  string "Product not found"
 // @Failure      500      {string}  string "Internal server error"
-// @Router       /products/{id} [delete]
+// @Router       /api/v1/products/{id} [delete]
 func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	idStr := r.PathValue("id")
@@ -215,9 +220,9 @@ func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":  "success",
-		"message": "Product deleted successfully",
+	if err := json.NewEncoder(w).Encode(MessageResponse{
+		Status:  "success",
+		Message: "Product deleted successfully",
 	}); err != nil {
 		h.logger.Error("failed to encode product delete response", zap.Error(err))
 	}

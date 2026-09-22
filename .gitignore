@@ -31,5 +31,7 @@ go.work.sum
 # .idea/
 .vscode/
 
-# Agents
-.agents/
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class

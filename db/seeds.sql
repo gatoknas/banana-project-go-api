@@ -6,7 +6,8 @@ INSERT INTO categories (name) VALUES
 ('Bebidas'),
 ('Sanduches'),
 ('Adiciones'),
-('Desechables');
+('Desechables'),
+('Cafeteria');
 
 INSERT INTO units_of_measure (name, abbreviation) VALUES 
 ('Unidad', 'und'),

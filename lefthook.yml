@@ -1,0 +1,6 @@
+pre-commit:
+  commands:
+    secret-scan:
+      run: python ./scripts/secret_scanner.py
+    tdt-gate:
+      run: go run ./cmd/testgate -staged

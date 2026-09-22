@@ -25,15 +25,16 @@ func NewUserHandler(s *service.UserService, logger *zap.Logger) *UserHandler {
 
 // Create handles POST /api/v1/users
 // @Summary      Create a new user
-// @Description  Creates a new system user (admin or salesperson) with a secure hashed password.
+// @Description  Creates a new system user (admin or salesperson) with a secure hashed password. Requires the ayurami-admin role.
 // @Tags         users
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        user  body      service.UserRequest  true  "User Creation Payload"
-// @Success      201   {object}  map[string]interface{}
+// @Success      201   {object}  handlers.MessageResponse
 // @Failure      400   {string}  string "Bad request"
 // @Failure      500   {string}  string "Internal server error"
-// @Router       /users [post]
+// @Router       /api/v1/users [post]
 func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var req service.UserRequest
@@ -52,21 +53,22 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":  "success",
-		"message": "User created successfully",
-		"id":      id,
+	_ = json.NewEncoder(w).Encode(MessageResponse{
+		Status:  "success",
+		Message: "User created successfully",
+		ID:      id,
 	})
 }
 
 // List handles GET /api/v1/users
 // @Summary      List users
-// @Description  Retrieves all registered users ordered alphabetically by name.
+// @Description  Retrieves all registered users ordered alphabetically by name. Requires the ayurami-admin role.
 // @Tags         users
 // @Produce      json
+// @Security     BearerAuth
 // @Success      200   {array}   models.User
 // @Failure      500   {string}  string "Internal server error"
-// @Router       /users [get]
+// @Router       /api/v1/users [get]
 func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	users, err := h.service.ListUsers(ctx)
@@ -82,15 +84,16 @@ func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // Get handles GET /api/v1/users/{id}
 // @Summary      Get user by ID
-// @Description  Retrieves detailed user profile information.
+// @Description  Retrieves detailed user profile information. Requires the ayurami-admin role.
 // @Tags         users
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id    path      int  true  "User ID"
 // @Success      200   {object}  models.User
 // @Failure      400   {string}  string "Bad request"
 // @Failure      404   {string}  string "User not found"
 // @Failure      500   {string}  string "Internal server error"
-// @Router       /users/{id} [get]
+// @Router       /api/v1/users/{id} [get]
 func (h *UserHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	idStr := r.PathValue("id")
@@ -118,17 +121,18 @@ func (h *UserHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // Update handles PUT /api/v1/users/{id}
 // @Summary      Update user
-// @Description  Updates a user's role, password, fullName, or status.
+// @Description  Updates a user's role, password, fullName, or status. Requires the ayurami-admin role.
 // @Tags         users
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id    path      int                  true  "User ID"
 // @Param        user  body      service.UserRequest  true  "User Update Payload"
-// @Success      200   {object}  map[string]interface{}
+// @Success      200   {object}  handlers.MessageResponse
 // @Failure      400   {string}  string "Bad request"
 // @Failure      404   {string}  string "User not found"
 // @Failure      500   {string}  string "Internal server error"
-// @Router       /users/{id} [put]
+// @Router       /api/v1/users/{id} [put]
 func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	idStr := r.PathValue("id")
@@ -159,23 +163,24 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":  "success",
-		"message": "User updated successfully",
+	_ = json.NewEncoder(w).Encode(MessageResponse{
+		Status:  "success",
+		Message: "User updated successfully",
 	})
 }
 
 // Delete handles DELETE /api/v1/users/{id}
 // @Summary      Delete user
-// @Description  Deletes a user from the system.
+// @Description  Deletes a user from the system. Requires the ayurami-admin role.
 // @Tags         users
 // @Produce      json
+// @Security     BearerAuth
 // @Param        id    path      int  true  "User ID"
-// @Success      200   {object}  map[string]interface{}
+// @Success      200   {object}  handlers.MessageResponse
 // @Failure      400   {string}  string "Bad request"
 // @Failure      404   {string}  string "User not found"
 // @Failure      500   {string}  string "Internal server error"
-// @Router       /users/{id} [delete]
+// @Router       /api/v1/users/{id} [delete]
 func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	idStr := r.PathValue("id")
@@ -199,8 +204,8 @@ func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":  "success",
-		"message": "User deleted successfully",
+	_ = json.NewEncoder(w).Encode(MessageResponse{
+		Status:  "success",
+		Message: "User deleted successfully",
 	})
 }

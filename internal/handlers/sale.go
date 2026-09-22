@@ -24,15 +24,16 @@ func NewSaleHandler(s *service.SaleService, logger *zap.Logger) *SaleHandler {
 
 // Create handles POST /api/v1/sales
 // @Summary      Create a new sale
-// @Description  Registers a new sale, deducts product or recipe ingredient inventory, and records details.
+// @Description  Registers a new sale, deducts product or recipe ingredient inventory, and records details. Requires the ayurami-admin or ayurami-salesperson role.
 // @Tags         sales
 // @Accept       json
 // @Produce      json
+// @Security     BearerAuth
 // @Param        sale     body      service.SaleRequest  true  "Sale Creation Payload"
-// @Success      201      {object}  map[string]interface{}
+// @Success      201      {object}  handlers.SaleResponse
 // @Failure      400      {string}  string "Bad request: invalid JSON payload or sale must have at least one item"
 // @Failure      500      {string}  string "Internal server error"
-// @Router       /sales [post]
+// @Router       /api/v1/sales [post]
 func (h *SaleHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var req service.SaleRequest
@@ -56,10 +57,10 @@ func (h *SaleHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":  "success",
-		"message": "Sale processed successfully",
-		"saleId":  saleID,
+	if err := json.NewEncoder(w).Encode(SaleResponse{
+		Status:  "success",
+		Message: "Sale processed successfully",
+		SaleID:  saleID,
 	}); err != nil {
 		h.logger.Error("failed to encode sale response", zap.Error(err))
 	}
