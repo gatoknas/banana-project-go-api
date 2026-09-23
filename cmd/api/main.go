@@ -1,20 +1,24 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/joho/godotenv"
+	"github.com/robfig/cron/v3"
 	"github.com/swaggo/swag"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	_ "org.banana.project/api/docs"
 	"org.banana.project/api/internal/auth"
 	"org.banana.project/api/internal/database"
+	"org.banana.project/api/internal/email"
 	"org.banana.project/api/internal/handlers"
 	"org.banana.project/api/internal/middleware"
 	"org.banana.project/api/internal/repository"
@@ -26,6 +30,10 @@ import (
 // @description     This is the API server for Banana Project.
 // @host            localhost:8082
 // @BasePath        /
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer " followed by the JWT obtained from POST /login.
 
 func main() {
 	// Load environment variables from .env file
@@ -128,6 +136,7 @@ func setupRouter(logger *zap.Logger) http.Handler {
 	mux.HandleFunc("GET /hello", helloHandler.Hello)
 	mux.HandleFunc("GET /hello/logo.png", helloHandler.Logo)
 	mux.HandleFunc("POST /login", authHandler.Login)
+	mux.HandleFunc("POST /refresh", authHandler.Refresh)
 
 	// API Documentation (Scalar UI)
 	mux.HandleFunc("GET /docs/swagger.json", func(w http.ResponseWriter, r *http.Request) {
@@ -188,9 +197,71 @@ func setupRouter(logger *zap.Logger) http.Handler {
 	protectedMux.Handle("PUT /products/{id}", adminOnly(http.HandlerFunc(productHandler.Update)))
 	protectedMux.Handle("DELETE /products/{id}", adminOnly(http.HandlerFunc(productHandler.Delete)))
 
+	// Wire category dependencies
+	categoryRepo := repository.NewSQLCategoryRepository(database.DB)
+	categoryService := service.NewCategoryService(categoryRepo)
+	categoryHandler := handlers.NewCategoryHandler(categoryService, logger)
+
+	protectedMux.Handle("GET /categories", salesAndAdmin(http.HandlerFunc(categoryHandler.List)))
+
+	// Wire email receipt dependencies (Gmail bank-receipt ingestion)
+	emailRepo := repository.NewSQLEmailReceiptRepository(database.DB)
+	gmailClient, err := email.NewClient(context.Background(), email.Config{
+		ClientID:     os.Getenv("GMAIL_CLIENT_ID"),
+		ClientSecret: os.Getenv("GMAIL_CLIENT_SECRET"),
+		RefreshToken: os.Getenv("GMAIL_REFRESH_TOKEN"),
+		TargetEmail:  os.Getenv("GMAIL_TARGET_EMAIL"),
+		Label:        os.Getenv("GMAIL_LABEL"),
+		SenderFilter: os.Getenv("GMAIL_SENDER_FILTER"),
+	})
+	if err != nil {
+		logger.Warn("Gmail email-receipt integration is disabled", zap.Error(err))
+	}
+	emailService := service.NewEmailReceiptService(emailRepo, gmailClient, logger)
+	emailHandler := handlers.NewEmailReceiptHandler(emailService, logger)
+
+	protectedMux.Handle("POST /email-receipts/sync", adminOnly(http.HandlerFunc(emailHandler.Sync)))
+	protectedMux.Handle("GET /email-receipts", salesAndAdmin(http.HandlerFunc(emailHandler.List)))
+
+	if gmailClient != nil {
+		startEmailSyncScheduler(emailService, logger)
+	}
+
 	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", middleware.RequireAuth(protectedMux)))
 
 	return mux
+}
+
+// startEmailSyncScheduler starts the background receipt sync using EMAIL_SYNC_CRON.
+func startEmailSyncScheduler(svc *service.EmailReceiptService, logger *zap.Logger) {
+	expr := os.Getenv("EMAIL_SYNC_CRON")
+	if expr == "" {
+		logger.Info("Scheduled email sync disabled (EMAIL_SYNC_CRON is empty)")
+		return
+	}
+
+	scheduler := cron.New()
+	if _, err := scheduler.AddFunc(expr, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		result, err := svc.SyncLastDay(ctx)
+		if err != nil {
+			logger.Error("scheduled email sync failed", zap.Error(err))
+			return
+		}
+		logger.Info("scheduled email sync completed",
+			zap.Int("fetched", result.Fetched),
+			zap.Int("imported", result.Imported),
+			zap.Int("skipped", result.Skipped),
+			zap.Int("errors", result.Errors))
+	}); err != nil {
+		logger.Error("invalid EMAIL_SYNC_CRON expression", zap.String("expr", expr), zap.Error(err))
+		return
+	}
+
+	scheduler.Start()
+	logger.Info("email sync scheduler started", zap.String("cron", expr))
 }
 
 // printBanner displays the themed console startup banner

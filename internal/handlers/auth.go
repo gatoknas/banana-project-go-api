@@ -17,7 +17,12 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	Token string `json:"token"`
+	Token        string `json:"token"`
+	RefreshToken string `json:"refreshToken"`
+}
+
+type RefreshRequest struct {
+	RefreshToken string `json:"refreshToken"`
 }
 
 type AuthHandler struct {
@@ -98,9 +103,80 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	refreshToken, err := auth.GenerateRefreshToken(user.ID, user.Username, user.Role)
+	if err != nil {
+		h.logger.Error("failed to generate refresh token", zap.Error(err), zap.String("username", username))
+		http.Error(w, "Failed to generate refresh token", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(LoginResponse{Token: token}); err != nil {
+	if err := json.NewEncoder(w).Encode(LoginResponse{
+		Token:        token,
+		RefreshToken: refreshToken,
+	}); err != nil {
 		h.logger.Error("failed to encode login response", zap.Error(err))
+	}
+}
+
+// Refresh handles POST /refresh
+// @Summary      Refresh JWT Token
+// @Description  Generates a new token pair using a valid refresh token.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        credentials  body      RefreshRequest  true  "Refresh Token"
+// @Success      200          {object}  LoginResponse
+// @Failure      400          {string}  string "Bad request"
+// @Failure      401          {string}  string "Unauthorized: invalid refresh token"
+// @Router       /refresh [post]
+func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	var req RefreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("failed to decode refresh request", zap.Error(err))
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if req.RefreshToken == "" {
+		http.Error(w, "Refresh token is required", http.StatusBadRequest)
+		return
+	}
+
+	claims, err := auth.ValidateToken(req.RefreshToken)
+	if err != nil || claims.TokenType != "refresh" {
+		h.logger.Warn("invalid refresh token attempt")
+		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
+		return
+	}
+
+	// Optionally check if the user is still active here
+	user, err := h.userService.GetUserByUsername(r.Context(), claims.Username)
+	if err != nil || !user.IsActive {
+		h.logger.Warn("refresh failed: user inactive or not found", zap.String("username", claims.Username))
+		http.Error(w, "User inactive or not found", http.StatusUnauthorized)
+		return
+	}
+
+	newToken, err := auth.GenerateToken(claims.UserID, claims.Username, claims.Role)
+	if err != nil {
+		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		return
+	}
+
+	newRefreshToken, err := auth.GenerateRefreshToken(claims.UserID, claims.Username, claims.Role)
+	if err != nil {
+		http.Error(w, "Failed to generate refresh token", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(LoginResponse{
+		Token:        newToken,
+		RefreshToken: newRefreshToken,
+	}); err != nil {
+		h.logger.Error("failed to encode refresh response", zap.Error(err))
 	}
 }

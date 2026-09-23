@@ -9,8 +9,9 @@ import (
 
 type Claims struct {
 	UserID   int64  `json:"id"`
-	Username string `json:"username"`
-	Role     string `json:"role"`
+	Username  string `json:"username"`
+	Role      string `json:"role"`
+	TokenType string `json:"token_type"`
 	jwt.RegisteredClaims
 }
 
@@ -20,11 +21,33 @@ func getSecretKey() []byte {
 
 func GenerateToken(userID int64, username string, role string) (string, error) {
 	claims := Claims{
-		UserID:   userID,
-		Username: username,
-		Role:     role,
+		UserID:    userID,
+		Username:  username,
+		Role:      role,
+		TokenType: "access",
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24)),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	tokenString, err := token.SignedString(getSecretKey())
+	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
+}
+
+func GenerateRefreshToken(userID int64, username string, role string) (string, error) {
+	claims := Claims{
+		UserID:    userID,
+		Username:  username,
+		Role:      role,
+		TokenType: "refresh",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24 * 7)), // 7 days
 		},
 	}
 
