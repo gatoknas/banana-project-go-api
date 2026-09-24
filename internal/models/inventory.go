@@ -60,8 +60,13 @@ type PurchaseDetail struct {
 	PurchaseID int64 `json:"purchaseId" db:"purchase_id"`
 	// ProductID is the bought item or ingredient product ID (Spanish: ID Producto).
 	ProductID int64 `json:"productId" db:"product_id"`
-	// QuantityPurchased is the quantity bought in the product's unit (Spanish: Cantidad Comprada).
+	// PurchaseUnitID is the unit of measure used in the purchase (Spanish: ID Unidad de Compra).
+	PurchaseUnitID *int64 `json:"purchaseUnitId,omitempty" db:"purchase_unit_id"`
+	// QuantityPurchased is the quantity bought in the purchase unit (Spanish: Cantidad Comprada).
 	QuantityPurchased float64 `json:"quantityPurchased" db:"quantity_purchased"`
 	// UnitCost is the net cost paid per unit in this purchase (Spanish: Costo Unitario).
 	UnitCost float64 `json:"unitCost" db:"unit_cost"`
+	// ConversionFactor is the ratio of base units per purchase unit (Spanish: Factor de Conversión).
+	ConversionFactor float64 `json:"conversionFactor" db:"conversion_factor"`
 }
+

@@ -502,6 +502,40 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/units-of-measure": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves all available units of measure ordered by name. Requires the ayurami-admin or ayurami-salesperson role.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "units-of-measure"
+                ],
+                "summary": "List units of measure",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.UnitOfMeasure"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users": {
             "get": {
                 "security": [
@@ -1174,6 +1208,27 @@ const docTemplate = `{
                 },
                 "transactionCount": {
                     "type": "integer"
+                }
+            }
+        },
+        "models.UnitOfMeasure": {
+            "type": "object",
+            "properties": {
+                "abbreviation": {
+                    "description": "Abbreviation is the short code representing the unit (Spanish: Abreviatura).",
+                    "type": "string"
+                },
+                "createdAt": {
+                    "description": "CreatedAt is the timestamp when the unit was created (Spanish: Creado En).",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID is the unique identifier (Spanish: ID).",
+                    "type": "integer"
+                },
+                "name": {
+                    "description": "Name is the name of the unit (Spanish: Nombre).",
+                    "type": "string"
                 }
             }
         },

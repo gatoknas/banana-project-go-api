@@ -144,11 +144,14 @@ CREATE TABLE purchase_details (
     id SERIAL PRIMARY KEY,
     purchase_id INT NOT NULL,
     product_id INT NOT NULL,
+    purchase_unit_id INT NULL,
     quantity_purchased DECIMAL(12, 4) NOT NULL,
     unit_cost DECIMAL(12, 2) NOT NULL,
+    conversion_factor DECIMAL(12, 4) NOT NULL DEFAULT 1.0000,
     
     CONSTRAINT fk_purchase_details_purchase FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
-    CONSTRAINT fk_purchase_details_product FOREIGN KEY (product_id) REFERENCES products(id)
+    CONSTRAINT fk_purchase_details_product FOREIGN KEY (product_id) REFERENCES products(id),
+    CONSTRAINT fk_purchase_details_purchase_unit FOREIGN KEY (purchase_unit_id) REFERENCES units_of_measure(id)
 );
 
 -- users (Spanish: usuarios)
