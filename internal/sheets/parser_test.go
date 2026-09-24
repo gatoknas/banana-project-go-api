@@ -75,6 +75,26 @@ func TestParseRow(t *testing.T) {
 			wantPayer:     "Maria Perez",
 		},
 		{
+			name: "Live row format from Google Sheet (Datos_Ventas)",
+			row: []any{
+				"24/9/2026 12:38:07",
+				13000,
+				"Aprobada",
+				"24/09/2026 7:11:56",
+				"LAURA CASTANO",
+				"Nequi",
+				"M01222971",
+				"20260924345544001ENT179025191555221",
+				"QR Negocios Bre-B",
+				"1a0d3545e78fd0fb",
+			},
+			wantErr:       false,
+			wantMessageID: "1a0d3545e78fd0fb",
+			wantAmount:    13000.0,
+			wantStatus:    "aprobada",
+			wantPayer:     "LAURA CASTANO",
+		},
+		{
 			name: "Missing message ID in column J",
 			row: []any{
 				"2026-09-24",
@@ -188,6 +208,8 @@ func TestParseDate(t *testing.T) {
 		{name: "Standard datetime", input: "2026-09-24 14:00:00", wantErr: false},
 		{name: "Date only", input: "2026-09-24", wantErr: false},
 		{name: "Colombian format slash", input: "24/09/2026 14:00:00", wantErr: false},
+		{name: "Colombian format single digit month", input: "24/9/2026 12:38:07", wantErr: false},
+		{name: "Colombian format single digit hour", input: "24/09/2026 7:11:56", wantErr: false},
 		{name: "Colombian date only", input: "24/09/2026", wantErr: false},
 		{name: "Invalid date", input: "invalid-date", wantErr: true},
 	}
