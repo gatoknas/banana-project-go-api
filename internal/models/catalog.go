@@ -34,8 +34,20 @@ type Product struct {
 	Description *string `json:"description" db:"description"`
 	// CategoryID is the reference ID of the category (Spanish: ID Categoría).
 	CategoryID int64 `json:"categoryId" db:"category_id"`
+	// CategoryName is the name of the category (Spanish: Nombre Categoría).
+	CategoryName *string `json:"categoryName,omitempty" db:"category_name"`
 	// UnitOfMeasureID is the reference ID of the unit of measure (Spanish: ID Unidad de Medida).
 	UnitOfMeasureID int64 `json:"unitOfMeasureId" db:"unit_of_measure_id"`
+	// UnitName is the name of the unit of measure (Spanish: Nombre Unidad).
+	UnitName *string `json:"unitName,omitempty" db:"unit_name"`
+	// UnitAbbreviation is the abbreviation of the unit of measure (Spanish: Abreviatura Unidad).
+	UnitAbbreviation *string `json:"unitAbbreviation,omitempty" db:"unit_abbreviation"`
+	// CurrentStock is the real-time stock from inventories (Spanish: Stock Actual).
+	CurrentStock float64 `json:"currentStock" db:"current_stock"`
+	// MinimumStock is the minimum reorder threshold from inventories (Spanish: Stock Mínimo).
+	MinimumStock float64 `json:"minimumStock" db:"minimum_stock"`
+	// MaximumStock is the maximum storage limit from inventories (Spanish: Stock Máximo).
+	MaximumStock float64 `json:"maximumStock" db:"maximum_stock"`
 	// SellPrice is the price for customers, can be 0 for pure ingredients (Spanish: Precio de Venta).
 	SellPrice float64 `json:"sellPrice" db:"sell_price"`
 	// AverageCost is the dynamic weighted cost from purchases (Spanish: Costo Promedio).
