@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"time"
 
 	"org.banana.project/api/internal/models"
@@ -16,6 +17,8 @@ type EmailReceiptRepository interface {
 	UpsertByMessageID(ctx context.Context, r *models.EmailReceipt) (bool, error)
 	// List returns receipts optionally filtered by a received_at range.
 	List(ctx context.Context, from, to *time.Time) ([]models.EmailReceipt, error)
+	// GetRevenueSummary returns aggregated revenue metrics and daily timeline buckets for the given date range.
+	GetRevenueSummary(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error)
 }
 
 type SQLEmailReceiptRepository struct {
@@ -154,3 +157,84 @@ func (r *SQLEmailReceiptRepository) List(ctx context.Context, from, to *time.Tim
 
 	return receipts, nil
 }
+
+func (r *SQLEmailReceiptRepository) GetRevenueSummary(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error) {
+	duration := to.Sub(from)
+	prevFrom := from.Add(-duration)
+
+	summaryQuery := `SELECT 
+		COALESCE(SUM(CASE WHEN COALESCE(transaction_date, received_at) >= $1 AND COALESCE(transaction_date, received_at) < $2 THEN amount ELSE 0 END), 0),
+		COUNT(CASE WHEN COALESCE(transaction_date, received_at) >= $1 AND COALESCE(transaction_date, received_at) < $2 THEN 1 END),
+		COALESCE(SUM(CASE WHEN COALESCE(transaction_date, received_at) >= $3 AND COALESCE(transaction_date, received_at) < $1 THEN amount ELSE 0 END), 0)
+		FROM email_receipts
+		WHERE status = 'imported'
+		  AND COALESCE(transaction_date, received_at) >= $3
+		  AND COALESCE(transaction_date, received_at) < $2`
+
+	var (
+		totalRevenue          float64
+		transactionCount      int
+		previousPeriodRevenue float64
+	)
+
+	err := r.db.QueryRowContext(ctx, summaryQuery, from, to, prevFrom).Scan(
+		&totalRevenue,
+		&transactionCount,
+		&previousPeriodRevenue,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query revenue summary: %w", err)
+	}
+
+	var averageTicket float64
+	if transactionCount > 0 {
+		averageTicket = math.Round((totalRevenue/float64(transactionCount))*100) / 100
+	}
+
+	var growthPercentage float64
+	if previousPeriodRevenue > 0 {
+		growthPercentage = math.Round(((totalRevenue-previousPeriodRevenue)/previousPeriodRevenue)*10000) / 100
+	} else if totalRevenue > 0 {
+		growthPercentage = 100.0
+	}
+
+	timelineQuery := `SELECT 
+		TO_CHAR(COALESCE(transaction_date, received_at) AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS day_date,
+		COALESCE(SUM(amount), 0),
+		COUNT(id)
+		FROM email_receipts
+		WHERE status = 'imported'
+		  AND COALESCE(transaction_date, received_at) >= $1
+		  AND COALESCE(transaction_date, received_at) < $2
+		GROUP BY day_date
+		ORDER BY day_date ASC`
+
+	rows, err := r.db.QueryContext(ctx, timelineQuery, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query revenue timeline: %w", err)
+	}
+	defer rows.Close()
+
+	timeline := make([]models.DailyRevenueBucket, 0)
+	for rows.Next() {
+		var b models.DailyRevenueBucket
+		if err := rows.Scan(&b.Date, &b.Amount, &b.Count); err != nil {
+			return nil, fmt.Errorf("failed to scan timeline row: %w", err)
+		}
+		timeline = append(timeline, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timeline rows error: %w", err)
+	}
+
+	return &models.RevenueSummary{
+		TotalRevenue:          totalRevenue,
+		TransactionCount:      transactionCount,
+		AverageTicket:         averageTicket,
+		PreviousPeriodRevenue: previousPeriodRevenue,
+		GrowthPercentage:      growthPercentage,
+		Currency:              "COP",
+		Timeline:              timeline,
+	}, nil
+}
+

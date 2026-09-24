@@ -59,6 +59,15 @@ definitions:
         description: 'Name is the category name (Spanish: Nombre).'
         type: string
     type: object
+  models.DailyRevenueBucket:
+    properties:
+      amount:
+        type: number
+      count:
+        type: integer
+      date:
+        type: string
+    type: object
   models.EmailReceipt:
     properties:
       amount:
@@ -159,6 +168,25 @@ definitions:
         description: 'UpdatedAt is the last modification timestamp (Spanish: Actualizado
           En).'
         type: string
+    type: object
+  models.RevenueSummary:
+    properties:
+      averageTicket:
+        type: number
+      currency:
+        type: string
+      growthPercentage:
+        type: number
+      previousPeriodRevenue:
+        type: number
+      timeline:
+        items:
+          $ref: '#/definitions/models.DailyRevenueBucket'
+        type: array
+      totalRevenue:
+        type: number
+      transactionCount:
+        type: integer
     type: object
   models.User:
     properties:
@@ -314,6 +342,40 @@ paths:
       security:
       - BearerAuth: []
       summary: List stored email receipts
+      tags:
+      - email-receipts
+  /api/v1/email-receipts/summary:
+    get:
+      description: Calculates total revenue, transaction counts, average ticket, period-over-period
+        growth, and daily timeline buckets from email receipts. Requires ayurami-admin
+        or ayurami-salesperson role.
+      parameters:
+      - description: Start date (YYYY-MM-DD, inclusive)
+        in: query
+        name: from
+        type: string
+      - description: End date (YYYY-MM-DD, inclusive)
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.RevenueSummary'
+        "400":
+          description: 'Bad request: invalid date or date range'
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get revenue summary and analytics
       tags:
       - email-receipts
   /api/v1/email-receipts/sync:

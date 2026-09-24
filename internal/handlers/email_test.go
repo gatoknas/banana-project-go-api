@@ -20,6 +20,7 @@ import (
 type MockEmailReceiptRepo struct {
 	UpsertByMessageIDFunc func(ctx context.Context, r *models.EmailReceipt) (bool, error)
 	ListFunc              func(ctx context.Context, from, to *time.Time) ([]models.EmailReceipt, error)
+	GetRevenueSummaryFunc func(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error)
 }
 
 func (m *MockEmailReceiptRepo) UpsertByMessageID(ctx context.Context, r *models.EmailReceipt) (bool, error) {
@@ -28,6 +29,13 @@ func (m *MockEmailReceiptRepo) UpsertByMessageID(ctx context.Context, r *models.
 
 func (m *MockEmailReceiptRepo) List(ctx context.Context, from, to *time.Time) ([]models.EmailReceipt, error) {
 	return m.ListFunc(ctx, from, to)
+}
+
+func (m *MockEmailReceiptRepo) GetRevenueSummary(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error) {
+	if m.GetRevenueSummaryFunc != nil {
+		return m.GetRevenueSummaryFunc(ctx, from, to)
+	}
+	return nil, nil
 }
 
 func newEmailHandler(repo *MockEmailReceiptRepo, client *email.Client) *handlers.EmailReceiptHandler {
@@ -192,3 +200,98 @@ func TestEmailReceiptHandler_List(t *testing.T) {
 		})
 	}
 }
+
+func TestEmailReceiptHandler_Summary(t *testing.T) {
+	tests := []struct {
+		name        string
+		query       string
+		repo        *MockEmailReceiptRepo
+		wantStatus  int
+		wantRevenue float64
+	}{
+		{
+			name:  "valid date range success",
+			query: "?from=2026-09-01&to=2026-09-20",
+			repo: &MockEmailReceiptRepo{
+				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error) {
+					return &models.RevenueSummary{
+						TotalRevenue:     350000.0,
+						TransactionCount: 12,
+						AverageTicket:    29166.67,
+						Currency:         "COP",
+					}, nil
+				},
+			},
+			wantStatus:  http.StatusOK,
+			wantRevenue: 350000.0,
+		},
+		{
+			name:  "default dates success",
+			query: "",
+			repo: &MockEmailReceiptRepo{
+				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error) {
+					return &models.RevenueSummary{
+						TotalRevenue:     100000.0,
+						TransactionCount: 2,
+						Currency:         "COP",
+					}, nil
+				},
+			},
+			wantStatus:  http.StatusOK,
+			wantRevenue: 100000.0,
+		},
+		{
+			name:       "invalid from date",
+			query:      "?from=not-a-date",
+			repo:       &MockEmailReceiptRepo{},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid to date",
+			query:      "?to=2026-99-99",
+			repo:       &MockEmailReceiptRepo{},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:  "invalid range from after to",
+			query: "?from=2026-09-20&to=2026-09-01",
+			repo:  &MockEmailReceiptRepo{},
+			// service returns "invalid date range"
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:  "internal service error",
+			query: "?from=2026-09-01&to=2026-09-20",
+			repo: &MockEmailReceiptRepo{
+				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error) {
+					return nil, errors.New("db error")
+				},
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newEmailHandler(tt.repo, nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/email-receipts/summary"+tt.query, nil)
+			w := httptest.NewRecorder()
+
+			h.Summary(w, req)
+
+			if w.Code != tt.wantStatus {
+				t.Fatalf("expected status %d, got %d (body: %s)", tt.wantStatus, w.Code, w.Body.String())
+			}
+			if tt.wantStatus == http.StatusOK {
+				var resp models.RevenueSummary
+				if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+					t.Fatalf("failed to decode response: %v", err)
+				}
+				if resp.TotalRevenue != tt.wantRevenue {
+					t.Errorf("expected total revenue %v, got %v", tt.wantRevenue, resp.TotalRevenue)
+				}
+			}
+		})
+	}
+}
+

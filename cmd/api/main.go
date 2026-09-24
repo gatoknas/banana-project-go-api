@@ -222,6 +222,7 @@ func setupRouter(logger *zap.Logger) http.Handler {
 
 	protectedMux.Handle("POST /email-receipts/sync", adminOnly(http.HandlerFunc(emailHandler.Sync)))
 	protectedMux.Handle("GET /email-receipts", salesAndAdmin(http.HandlerFunc(emailHandler.List)))
+	protectedMux.Handle("GET /email-receipts/summary", salesAndAdmin(http.HandlerFunc(emailHandler.Summary)))
 
 	if gmailClient != nil {
 		startEmailSyncScheduler(emailService, logger)
