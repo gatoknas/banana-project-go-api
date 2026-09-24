@@ -188,6 +188,34 @@ definitions:
       transactionCount:
         type: integer
     type: object
+  models.Supplier:
+    properties:
+      companyName:
+        description: 'CompanyName is the legal name of the business (Spanish: Razón
+          Social).'
+        type: string
+      contactName:
+        description: 'ContactName is the provider contact representative (Spanish:
+          Nombre de Contacto).'
+        type: string
+      createdAt:
+        description: 'CreatedAt is the timestamp when the supplier was registered
+          (Spanish: Creado En).'
+        type: string
+      email:
+        description: 'Email is the contact email address (Spanish: Correo Electrónico).'
+        type: string
+      id:
+        description: 'ID is the unique identifier (Spanish: ID).'
+        type: integer
+      phone:
+        description: 'Phone is the contact number (Spanish: Teléfono).'
+        type: string
+      taxId:
+        description: 'TaxID is the tax identifier (e.g. NIT/Cédula) (Spanish: NIT
+          o Cédula).'
+        type: string
+    type: object
   models.UnitOfMeasure:
     properties:
       abbreviation:
@@ -272,6 +300,19 @@ definitions:
         type: number
       userId:
         type: integer
+    type: object
+  service.SupplierRequest:
+    properties:
+      companyName:
+        type: string
+      contactName:
+        type: string
+      email:
+        type: string
+      phone:
+        type: string
+      taxId:
+        type: string
     type: object
   service.SyncResult:
     properties:
@@ -624,6 +665,186 @@ paths:
       summary: Create a new sale
       tags:
       - sales
+  /api/v1/suppliers:
+    get:
+      description: Retrieves all registered suppliers with optional search filtering
+        by company name, tax ID, or contact. Requires the ayurami-admin or ayurami-salesperson
+        role.
+      parameters:
+      - description: Search filter query
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Supplier'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List suppliers
+      tags:
+      - suppliers
+    post:
+      consumes:
+      - application/json
+      description: Registers a new goods or ingredients provider. Requires the ayurami-admin
+        role.
+      parameters:
+      - description: Supplier Creation Payload
+        in: body
+        name: supplier
+        required: true
+        schema:
+          $ref: '#/definitions/service.SupplierRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.MessageResponse'
+        "400":
+          description: 'Bad request: invalid payload or missing fields'
+          schema:
+            type: string
+        "409":
+          description: 'Conflict: tax ID already registered'
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Create a new supplier
+      tags:
+      - suppliers
+  /api/v1/suppliers/{id}:
+    delete:
+      description: Deletes a supplier by ID if they have no associated purchases.
+        Requires the ayurami-admin role.
+      parameters:
+      - description: Supplier ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.MessageResponse'
+        "400":
+          description: Invalid supplier ID
+          schema:
+            type: string
+        "404":
+          description: Supplier not found
+          schema:
+            type: string
+        "409":
+          description: 'Conflict: cannot delete supplier with associated purchases'
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Delete a supplier
+      tags:
+      - suppliers
+    get:
+      description: Retrieves detailed information of a single supplier. Requires the
+        ayurami-admin or ayurami-salesperson role.
+      parameters:
+      - description: Supplier ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Supplier'
+        "400":
+          description: Invalid supplier ID
+          schema:
+            type: string
+        "404":
+          description: Supplier not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get a supplier by ID
+      tags:
+      - suppliers
+    put:
+      consumes:
+      - application/json
+      description: Modifies an existing supplier's details. Requires the ayurami-admin
+        role.
+      parameters:
+      - description: Supplier ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Supplier Update Payload
+        in: body
+        name: supplier
+        required: true
+        schema:
+          $ref: '#/definitions/service.SupplierRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.MessageResponse'
+        "400":
+          description: 'Bad request: invalid payload or missing fields'
+          schema:
+            type: string
+        "404":
+          description: Supplier not found
+          schema:
+            type: string
+        "409":
+          description: 'Conflict: tax ID already registered'
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Update a supplier
+      tags:
+      - suppliers
   /api/v1/units-of-measure:
     get:
       description: Retrieves all available units of measure ordered by name. Requires
