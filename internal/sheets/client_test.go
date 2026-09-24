@@ -2,10 +2,13 @@ package sheets
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"google.golang.org/api/googleapi"
 )
 
 func TestNewClient_Config(t *testing.T) {
@@ -136,6 +139,60 @@ func TestClient_FetchChunk_Validation(t *testing.T) {
 			}
 			if tt.wantErr && tt.expectedErr != "" && !containsSubstring(err.Error(), tt.expectedErr) {
 				t.Errorf("expected error containing %q, got %v", tt.expectedErr, err)
+			}
+		})
+	}
+}
+
+func TestIsRateLimitError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "Nil error",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "Regular error",
+			err:  errors.New("connection reset by peer"),
+			want: false,
+		},
+		{
+			name: "HTTP 429 string message",
+			err:  errors.New("googleapi: Error 429: Quota exceeded for quota metric 'Read requests'"),
+			want: true,
+		},
+		{
+			name: "rateLimitExceeded reason",
+			err:  errors.New("rateLimitExceeded: User Rate Limit Exceeded"),
+			want: true,
+		},
+		{
+			name: "googleapi.Error with 429",
+			err: &googleapi.Error{
+				Code: 429,
+			},
+			want: true,
+		},
+		{
+			name: "googleapi.Error with 403 userRateLimitExceeded",
+			err: &googleapi.Error{
+				Code: 403,
+				Errors: []googleapi.ErrorItem{
+					{Reason: "userRateLimitExceeded"},
+				},
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsRateLimitError(tt.err); got != tt.want {
+				t.Errorf("IsRateLimitError() = %v, want %v", got, tt.want)
 			}
 		})
 	}

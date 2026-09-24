@@ -3,20 +3,26 @@ package sheets
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	sheetsv4 "google.golang.org/api/sheets/v4"
 )
 
 // DefaultChunkSize is the fallback number of rows fetched per request.
-const DefaultChunkSize = 50
+const DefaultChunkSize = 500
 
 // DefaultTimeout is the per-chunk HTTP request timeout.
 const DefaultTimeout = 15 * time.Second
+
+// MaxRetries is the maximum number of retry attempts when rate limited.
+const MaxRetries = 5
 
 // Config holds Google Sheets authentication and target document settings.
 type Config struct {
@@ -28,7 +34,7 @@ type Config struct {
 	SpreadsheetID string
 	// SheetName is the tab/sheet name (e.g. Datos_Ventas).
 	SheetName string
-	// ChunkSize is the number of rows per chunk (defaults to 50).
+	// ChunkSize is the number of rows per chunk (defaults to 500).
 	ChunkSize int
 	// Timeout is the maximum duration for a single chunk fetch (defaults to 15s).
 	Timeout time.Duration
@@ -72,6 +78,7 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 
 // FetchChunk reads a bounded row range from Google Sheets starting at startRow up to startRow+limit-1.
 // Returns an empty slice if the requested range has no rows (EOF).
+// Automatically retries with exponential backoff when a 429 Rate Limit error is returned by Google Sheets API.
 func (c *Client) FetchChunk(ctx context.Context, spreadsheetID, sheetName string, startRow, limit int) ([][]any, error) {
 	if c == nil || c.svc == nil {
 		return nil, fmt.Errorf("google sheets service is not initialized")
@@ -91,6 +98,9 @@ func (c *Client) FetchChunk(ctx context.Context, spreadsheetID, sheetName string
 	if limit <= 0 {
 		limit = c.cfg.ChunkSize
 	}
+	if limit <= 0 {
+		limit = DefaultChunkSize
+	}
 	if startRow < 1 {
 		startRow = 1
 	}
@@ -98,19 +108,63 @@ func (c *Client) FetchChunk(ctx context.Context, spreadsheetID, sheetName string
 	endRow := startRow + limit - 1
 	rangeSpec := fmt.Sprintf("%s!A%d:J%d", sheetName, startRow, endRow)
 
-	fetchCtx, cancel := context.WithTimeout(ctx, c.cfg.Timeout)
-	defer cancel()
+	var lastErr error
+	for attempt := 0; attempt <= MaxRetries; attempt++ {
+		fetchCtx, cancel := context.WithTimeout(ctx, c.cfg.Timeout)
+		resp, err := c.svc.Spreadsheets.Values.Get(spreadsheetID, rangeSpec).Context(fetchCtx).Do()
+		cancel()
 
-	resp, err := c.svc.Spreadsheets.Values.Get(spreadsheetID, rangeSpec).Context(fetchCtx).Do()
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch sheet range %q: %w", rangeSpec, err)
+		if err == nil {
+			if resp == nil || len(resp.Values) == 0 {
+				return [][]any{}, nil
+			}
+			return resp.Values, nil
+		}
+
+		lastErr = err
+		if isRateLimitError(err) && attempt < MaxRetries {
+			// Exponential backoff: 3s, 6s, 12s, 24s, 48s
+			backoff := time.Duration(1<<attempt) * 3 * time.Second
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+				continue
+			}
+		}
+
+		break
 	}
 
-	if resp == nil || len(resp.Values) == 0 {
-		return [][]any{}, nil
-	}
+	return nil, fmt.Errorf("failed to fetch sheet range %q: %w", rangeSpec, lastErr)
+}
 
-	return resp.Values, nil
+// IsRateLimitError checks if an error returned by Google API is a quota or rate-limit violation (HTTP 429).
+func IsRateLimitError(err error) bool {
+	return isRateLimitError(err)
+}
+
+func isRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var gErr *googleapi.Error
+	if errors.As(err, &gErr) {
+		if gErr.Code == http.StatusTooManyRequests || gErr.Code == 429 {
+			return true
+		}
+		for _, item := range gErr.Errors {
+			if item.Reason == "rateLimitExceeded" || item.Reason == "userRateLimitExceeded" || item.Reason == "quotaExceeded" {
+				return true
+			}
+		}
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "429") ||
+		strings.Contains(msg, "RATE_LIMIT_EXCEEDED") ||
+		strings.Contains(msg, "rateLimitExceeded") ||
+		strings.Contains(msg, "userRateLimitExceeded") ||
+		strings.Contains(msg, "Quota exceeded")
 }
 
 // buildAuthOptions creates Google client options from JSON string, base64 string, or file path.

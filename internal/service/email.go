@@ -144,6 +144,13 @@ func (s *EmailReceiptService) Sync(ctx context.Context, req EmailReceiptSyncRequ
 		if len(rows) < s.chunkSize {
 			break
 		}
+
+		// Pacing delay to avoid burst spikes against Google Sheets per-minute read quota
+		select {
+		case <-ctx.Done():
+			return result, ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
 
 	return result, nil
