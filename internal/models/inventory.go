@@ -40,6 +40,8 @@ type Purchase struct {
 	ID int64 `json:"id" db:"id"`
 	// SupplierID is the reference to the supplying company (Spanish: ID Proveedor).
 	SupplierID int64 `json:"supplierId" db:"supplier_id"`
+	// SupplierName is the company name of the supplier (Spanish: Nombre Proveedor).
+	SupplierName *string `json:"supplierName,omitempty" db:"supplier_name"`
 	// PurchaseDate is when the transaction occurred (Spanish: Fecha de Compra).
 	PurchaseDate time.Time `json:"purchaseDate" db:"purchase_date"`
 	// InvoiceNumber is the provider's physical invoice ID (Spanish: Número de Factura).
@@ -50,6 +52,8 @@ type Purchase struct {
 	Notes *string `json:"notes" db:"notes"`
 	// CreatedAt is the creation timestamp (Spanish: Creado En).
 	CreatedAt time.Time `json:"createdAt" db:"created_at"`
+	// Details is the list of line items in this purchase (Spanish: Detalles de Compra).
+	Details []PurchaseDetail `json:"details,omitempty"`
 }
 
 // PurchaseDetail represents a single line-item of a purchase invoice (Spanish: Detalle Compra).
@@ -60,13 +64,21 @@ type PurchaseDetail struct {
 	PurchaseID int64 `json:"purchaseId" db:"purchase_id"`
 	// ProductID is the bought item or ingredient product ID (Spanish: ID Producto).
 	ProductID int64 `json:"productId" db:"product_id"`
+	// ProductName is the name of the bought product (Spanish: Nombre Producto).
+	ProductName *string `json:"productName,omitempty" db:"product_name"`
 	// PurchaseUnitID is the unit of measure used in the purchase (Spanish: ID Unidad de Compra).
 	PurchaseUnitID *int64 `json:"purchaseUnitId,omitempty" db:"purchase_unit_id"`
+	// PurchaseUnitName is the name of the purchase unit (Spanish: Unidad de Compra).
+	PurchaseUnitName *string `json:"purchaseUnitName,omitempty" db:"purchase_unit_name"`
 	// QuantityPurchased is the quantity bought in the purchase unit (Spanish: Cantidad Comprada).
 	QuantityPurchased float64 `json:"quantityPurchased" db:"quantity_purchased"`
 	// UnitCost is the net cost paid per unit in this purchase (Spanish: Costo Unitario).
 	UnitCost float64 `json:"unitCost" db:"unit_cost"`
 	// ConversionFactor is the ratio of base units per purchase unit (Spanish: Factor de Conversión).
 	ConversionFactor float64 `json:"conversionFactor" db:"conversion_factor"`
+	// Subtotal is the total price for this line item (Spanish: Subtotal).
+	Subtotal float64 `json:"subtotal"`
+	// BaseQuantity is the effective quantity added to inventory stock (Spanish: Cantidad Base).
+	BaseQuantity float64 `json:"baseQuantity"`
 }
 

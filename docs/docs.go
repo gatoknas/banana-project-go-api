@@ -451,6 +451,167 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/purchases": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves purchase orders ordered by date descending with optional supplier and date range filtering. Requires the ayurami-admin or ayurami-salesperson role.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "purchases"
+                ],
+                "summary": "List purchase orders",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Filter by supplier ID",
+                        "name": "supplierId",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date filter (YYYY-MM-DD or RFC3339)",
+                        "name": "fromDate",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date filter (YYYY-MM-DD or RFC3339)",
+                        "name": "toDate",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Purchase"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request: invalid filter parameters",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Registers a restock invoice, inserts purchase details, atomically increments physical inventory stock, and recalculates product weighted average cost (PMP). Requires the ayurami-admin or ayurami-salesperson role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "purchases"
+                ],
+                "summary": "Create a new purchase order / restock",
+                "parameters": [
+                    {
+                        "description": "Purchase Payload",
+                        "name": "purchase",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.PurchaseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request: invalid payload or validation error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/purchases/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves a single purchase header and its associated item line details. Requires the ayurami-admin or ayurami-salesperson role.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "purchases"
+                ],
+                "summary": "Get purchase order details",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Purchase ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Purchase"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid purchase ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Purchase not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/sales": {
             "post": {
                 "security": [
@@ -1479,6 +1640,99 @@ const docTemplate = `{
                 }
             }
         },
+        "models.Purchase": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "description": "CreatedAt is the creation timestamp (Spanish: Creado En).",
+                    "type": "string"
+                },
+                "details": {
+                    "description": "Details is the list of line items in this purchase (Spanish: Detalles de Compra).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.PurchaseDetail"
+                    }
+                },
+                "id": {
+                    "description": "ID is the unique identifier (Spanish: ID).",
+                    "type": "integer"
+                },
+                "invoiceNumber": {
+                    "description": "InvoiceNumber is the provider's physical invoice ID (Spanish: Número de Factura).",
+                    "type": "string"
+                },
+                "notes": {
+                    "description": "Notes is any additional comment or observation (Spanish: Observaciones).",
+                    "type": "string"
+                },
+                "purchaseDate": {
+                    "description": "PurchaseDate is when the transaction occurred (Spanish: Fecha de Compra).",
+                    "type": "string"
+                },
+                "supplierId": {
+                    "description": "SupplierID is the reference to the supplying company (Spanish: ID Proveedor).",
+                    "type": "integer"
+                },
+                "supplierName": {
+                    "description": "SupplierName is the company name of the supplier (Spanish: Nombre Proveedor).",
+                    "type": "string"
+                },
+                "totalAmount": {
+                    "description": "TotalAmount is the sum paid for the purchase (Spanish: Total de la Compra).",
+                    "type": "number"
+                }
+            }
+        },
+        "models.PurchaseDetail": {
+            "type": "object",
+            "properties": {
+                "baseQuantity": {
+                    "description": "BaseQuantity is the effective quantity added to inventory stock (Spanish: Cantidad Base).",
+                    "type": "number"
+                },
+                "conversionFactor": {
+                    "description": "ConversionFactor is the ratio of base units per purchase unit (Spanish: Factor de Conversión).",
+                    "type": "number"
+                },
+                "id": {
+                    "description": "ID is the unique identifier (Spanish: ID).",
+                    "type": "integer"
+                },
+                "productId": {
+                    "description": "ProductID is the bought item or ingredient product ID (Spanish: ID Producto).",
+                    "type": "integer"
+                },
+                "productName": {
+                    "description": "ProductName is the name of the bought product (Spanish: Nombre Producto).",
+                    "type": "string"
+                },
+                "purchaseId": {
+                    "description": "PurchaseID is the parent purchase header ID (Spanish: ID Compra).",
+                    "type": "integer"
+                },
+                "purchaseUnitId": {
+                    "description": "PurchaseUnitID is the unit of measure used in the purchase (Spanish: ID Unidad de Compra).",
+                    "type": "integer"
+                },
+                "purchaseUnitName": {
+                    "description": "PurchaseUnitName is the name of the purchase unit (Spanish: Unidad de Compra).",
+                    "type": "string"
+                },
+                "quantityPurchased": {
+                    "description": "QuantityPurchased is the quantity bought in the purchase unit (Spanish: Cantidad Comprada).",
+                    "type": "number"
+                },
+                "subtotal": {
+                    "description": "Subtotal is the total price for this line item (Spanish: Subtotal).",
+                    "type": "number"
+                },
+                "unitCost": {
+                    "description": "UnitCost is the net cost paid per unit in this purchase (Spanish: Costo Unitario).",
+                    "type": "number"
+                }
+            }
+        },
         "models.RevenueSummary": {
             "type": "object",
             "properties": {
@@ -1627,6 +1881,49 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "unitOfMeasureId": {
+                    "type": "integer"
+                }
+            }
+        },
+        "service.PurchaseItemRequest": {
+            "type": "object",
+            "properties": {
+                "conversionFactor": {
+                    "type": "number"
+                },
+                "productId": {
+                    "type": "integer"
+                },
+                "purchaseUnitId": {
+                    "type": "integer"
+                },
+                "quantityPurchased": {
+                    "type": "number"
+                },
+                "unitCost": {
+                    "type": "number"
+                }
+            }
+        },
+        "service.PurchaseRequest": {
+            "type": "object",
+            "properties": {
+                "invoiceNumber": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/service.PurchaseItemRequest"
+                    }
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "purchaseDate": {
+                    "type": "string"
+                },
+                "supplierId": {
                     "type": "integer"
                 }
             }
