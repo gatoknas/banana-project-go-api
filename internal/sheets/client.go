@@ -73,7 +73,7 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 // FetchChunk reads a bounded row range from Google Sheets starting at startRow up to startRow+limit-1.
 // Returns an empty slice if the requested range has no rows (EOF).
 func (c *Client) FetchChunk(ctx context.Context, spreadsheetID, sheetName string, startRow, limit int) ([][]any, error) {
-	if c.svc == nil {
+	if c == nil || c.svc == nil {
 		return nil, fmt.Errorf("google sheets service is not initialized")
 	}
 	if spreadsheetID == "" {

@@ -102,7 +102,8 @@ func main() {
 
 	logger.Info("Server is starting", zap.String("port", port), zap.String("env", env))
 	corsRouter := middleware.CORS(router)
-	if err := http.ListenAndServe(port, corsRouter); err != nil {
+	recoveredRouter := middleware.Recoverer(logger)(corsRouter)
+	if err := http.ListenAndServe(port, recoveredRouter); err != nil {
 		logger.Fatal("Could not start server", zap.Error(err))
 	}
 }
@@ -223,6 +224,7 @@ func setupRouter(logger *zap.Logger) http.Handler {
 		sheetName = "Datos_Ventas"
 	}
 
+	var sheetsReader sheets.Reader
 	sheetsClient, err := sheets.NewClient(context.Background(), sheets.Config{
 		CredentialsJSON: os.Getenv("GOOGLE_SHEETS_CREDENTIALS_JSON"),
 		CredentialsFile: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"),
@@ -232,8 +234,10 @@ func setupRouter(logger *zap.Logger) http.Handler {
 	})
 	if err != nil {
 		logger.Warn("Google Sheets receipt integration is disabled or not configured", zap.Error(err))
+	} else {
+		sheetsReader = sheetsClient
 	}
-	emailService := service.NewEmailReceiptService(emailRepo, sheetsClient, spreadsheetID, sheetName, chunkSize, logger)
+	emailService := service.NewEmailReceiptService(emailRepo, sheetsReader, spreadsheetID, sheetName, chunkSize, logger)
 	emailHandler := handlers.NewEmailReceiptHandler(emailService, logger)
 
 	protectedMux.Handle("POST /email-receipts/sync", adminOnly(http.HandlerFunc(emailHandler.Sync)))
