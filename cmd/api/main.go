@@ -223,6 +223,15 @@ func setupRouter(logger *zap.Logger) http.Handler {
 	protectedMux.Handle("PUT /suppliers/{id}", adminOnly(http.HandlerFunc(supplierHandler.Update)))
 	protectedMux.Handle("DELETE /suppliers/{id}", adminOnly(http.HandlerFunc(supplierHandler.Delete)))
 
+	// Wire purchase dependencies
+	purchaseRepo := repository.NewSQLPurchaseRepository(database.DB)
+	purchaseService := service.NewPurchaseService(purchaseRepo, database.DB)
+	purchaseHandler := handlers.NewPurchaseHandler(purchaseService, logger)
+
+	protectedMux.Handle("POST /purchases", salesAndAdmin(http.HandlerFunc(purchaseHandler.Create)))
+	protectedMux.Handle("GET /purchases", salesAndAdmin(http.HandlerFunc(purchaseHandler.List)))
+	protectedMux.Handle("GET /purchases/{id}", salesAndAdmin(http.HandlerFunc(purchaseHandler.Get)))
+
 	// Wire email receipt dependencies (Google Sheets bank-receipt ingestion)
 	emailRepo := repository.NewSQLEmailReceiptRepository(database.DB)
 	chunkSize := sheets.DefaultChunkSize
