@@ -116,3 +116,54 @@ func (h *EmailReceiptHandler) List(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(receipts)
 }
+
+// Summary handles GET /api/v1/email-receipts/summary
+// @Summary      Get revenue summary and analytics
+// @Description  Calculates total revenue, transaction counts, average ticket, period-over-period growth, and daily timeline buckets from email receipts. Requires ayurami-admin or ayurami-salesperson role.
+// @Tags         email-receipts
+// @Produce      json
+// @Security     BearerAuth
+// @Param        from  query     string  false  "Start date (YYYY-MM-DD, inclusive)"
+// @Param        to    query     string  false  "End date (YYYY-MM-DD, inclusive)"
+// @Success      200   {object}  models.RevenueSummary
+// @Failure      400   {string}  string "Bad request: invalid date or date range"
+// @Failure      500   {string}  string "Internal server error"
+// @Router       /api/v1/email-receipts/summary [get]
+func (h *EmailReceiptHandler) Summary(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var from, to *time.Time
+	if v := strings.TrimSpace(r.URL.Query().Get("from")); v != "" {
+		t, err := time.ParseInLocation("2006-01-02", v, email.Colombia)
+		if err != nil {
+			http.Error(w, "Bad request: invalid 'from' date, expected YYYY-MM-DD", http.StatusBadRequest)
+			return
+		}
+		from = &t
+	}
+	if v := strings.TrimSpace(r.URL.Query().Get("to")); v != "" {
+		t, err := time.ParseInLocation("2006-01-02", v, email.Colombia)
+		if err != nil {
+			http.Error(w, "Bad request: invalid 'to' date, expected YYYY-MM-DD", http.StatusBadRequest)
+			return
+		}
+		t = t.AddDate(0, 0, 1) // make the "to" day inclusive
+		to = &t
+	}
+
+	summary, err := h.service.GetRevenueSummary(ctx, from, to)
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid") {
+			h.logger.Warn("invalid revenue summary request", zap.Error(err))
+			http.Error(w, fmt.Sprintf("Bad request: %v", err), http.StatusBadRequest)
+			return
+		}
+		h.logger.Error("failed to get revenue summary", zap.Error(err))
+		http.Error(w, fmt.Sprintf("Internal error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(summary)
+}
+

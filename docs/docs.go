@@ -103,6 +103,57 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/email-receipts/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Calculates total revenue, transaction counts, average ticket, period-over-period growth, and daily timeline buckets from email receipts. Requires ayurami-admin or ayurami-salesperson role.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "email-receipts"
+                ],
+                "summary": "Get revenue summary and analytics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD, inclusive)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.RevenueSummary"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request: invalid date or date range",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/email-receipts/sync": {
             "post": {
                 "security": [
@@ -966,6 +1017,20 @@ const docTemplate = `{
                 }
             }
         },
+        "models.DailyRevenueBucket": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number"
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string"
+                }
+            }
+        },
         "models.EmailReceipt": {
             "type": "object",
             "properties": {
@@ -1081,6 +1146,35 @@ const docTemplate = `{
                 "updatedAt": {
                     "description": "UpdatedAt is the last modification timestamp (Spanish: Actualizado En).",
                     "type": "string"
+                }
+            }
+        },
+        "models.RevenueSummary": {
+            "type": "object",
+            "properties": {
+                "averageTicket": {
+                    "type": "number"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "growthPercentage": {
+                    "type": "number"
+                },
+                "previousPeriodRevenue": {
+                    "type": "number"
+                },
+                "timeline": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DailyRevenueBucket"
+                    }
+                },
+                "totalRevenue": {
+                    "type": "number"
+                },
+                "transactionCount": {
+                    "type": "integer"
                 }
             }
         },
