@@ -3,14 +3,15 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"go.uber.org/zap"
-	"org.banana.project/api/internal/email"
 	"org.banana.project/api/internal/models"
 	"org.banana.project/api/internal/service"
+	"org.banana.project/api/internal/sheets"
 )
 
 type EmailReceiptHandler struct {
@@ -26,13 +27,13 @@ func NewEmailReceiptHandler(s *service.EmailReceiptService, logger *zap.Logger) 
 }
 
 // Sync handles POST /api/v1/email-receipts/sync
-// @Summary      Sync bank receipts from the email inbox
-// @Description  Reads receipt emails from the configured Gmail inbox for a date range and stores the sale details. Requires the ayurami-admin role.
+// @Summary      Sync bank receipts from Google Sheets
+// @Description  Reads receipt registers from the configured Google Sheets document in chunks and stores new sale details. Requires the ayurami-admin role.
 // @Tags         email-receipts
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        range  body      service.EmailReceiptSyncRequest  true  "Date range (from/to as YYYY-MM-DD)"
+// @Param        range  body      service.EmailReceiptSyncRequest  false  "Optional date range (from/to as YYYY-MM-DD)"
 // @Success      200    {object}  handlers.SyncResponse
 // @Failure      400    {string}  string "Bad request: invalid JSON payload or date range"
 // @Failure      500    {string}  string "Internal server error"
@@ -41,10 +42,12 @@ func (h *EmailReceiptHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var req service.EmailReceiptSyncRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.logger.Error("failed to decode email receipt sync request", zap.Error(err))
-		http.Error(w, "Bad request: invalid JSON payload", http.StatusBadRequest)
-		return
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+			h.logger.Error("failed to decode email receipt sync request", zap.Error(err))
+			http.Error(w, "Bad request: invalid JSON payload", http.StatusBadRequest)
+			return
+		}
 	}
 
 	result, err := h.service.Sync(ctx, req)
@@ -85,7 +88,7 @@ func (h *EmailReceiptHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	var from, to *time.Time
 	if v := strings.TrimSpace(r.URL.Query().Get("from")); v != "" {
-		t, err := time.ParseInLocation("2006-01-02", v, email.Colombia)
+		t, err := time.ParseInLocation("2006-01-02", v, sheets.Colombia)
 		if err != nil {
 			http.Error(w, "Bad request: invalid 'from' date, expected YYYY-MM-DD", http.StatusBadRequest)
 			return
@@ -93,7 +96,7 @@ func (h *EmailReceiptHandler) List(w http.ResponseWriter, r *http.Request) {
 		from = &t
 	}
 	if v := strings.TrimSpace(r.URL.Query().Get("to")); v != "" {
-		t, err := time.ParseInLocation("2006-01-02", v, email.Colombia)
+		t, err := time.ParseInLocation("2006-01-02", v, sheets.Colombia)
 		if err != nil {
 			http.Error(w, "Bad request: invalid 'to' date, expected YYYY-MM-DD", http.StatusBadRequest)
 			return
@@ -134,7 +137,7 @@ func (h *EmailReceiptHandler) Summary(w http.ResponseWriter, r *http.Request) {
 
 	var from, to *time.Time
 	if v := strings.TrimSpace(r.URL.Query().Get("from")); v != "" {
-		t, err := time.ParseInLocation("2006-01-02", v, email.Colombia)
+		t, err := time.ParseInLocation("2006-01-02", v, sheets.Colombia)
 		if err != nil {
 			http.Error(w, "Bad request: invalid 'from' date, expected YYYY-MM-DD", http.StatusBadRequest)
 			return
@@ -142,7 +145,7 @@ func (h *EmailReceiptHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		from = &t
 	}
 	if v := strings.TrimSpace(r.URL.Query().Get("to")); v != "" {
-		t, err := time.ParseInLocation("2006-01-02", v, email.Colombia)
+		t, err := time.ParseInLocation("2006-01-02", v, sheets.Colombia)
 		if err != nil {
 			http.Error(w, "Bad request: invalid 'to' date, expected YYYY-MM-DD", http.StatusBadRequest)
 			return
@@ -166,4 +169,3 @@ func (h *EmailReceiptHandler) Summary(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(summary)
 }
-

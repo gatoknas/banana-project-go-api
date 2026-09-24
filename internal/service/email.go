@@ -7,15 +7,15 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"org.banana.project/api/internal/email"
 	"org.banana.project/api/internal/models"
 	"org.banana.project/api/internal/repository"
+	"org.banana.project/api/internal/sheets"
 )
 
-// EmailReceiptSyncRequest is the payload for a manual receipt sync (dates as YYYY-MM-DD).
+// EmailReceiptSyncRequest is the payload for a manual receipt sync (optional dates as YYYY-MM-DD).
 type EmailReceiptSyncRequest struct {
-	From string `json:"from"`
-	To   string `json:"to"`
+	From string `json:"from,omitempty"`
+	To   string `json:"to,omitempty"`
 }
 
 // SyncResult summarises the outcome of a receipt sync run.
@@ -27,37 +27,131 @@ type SyncResult struct {
 }
 
 type EmailReceiptService struct {
-	repo   repository.EmailReceiptRepository
-	client *email.Client
-	logger *zap.Logger
+	repo          repository.EmailReceiptRepository
+	sheetsReader  sheets.Reader
+	spreadsheetID string
+	sheetName     string
+	chunkSize     int
+	logger        *zap.Logger
 }
 
-func NewEmailReceiptService(repo repository.EmailReceiptRepository, client *email.Client, logger *zap.Logger) *EmailReceiptService {
-	return &EmailReceiptService{repo: repo, client: client, logger: logger}
+func NewEmailReceiptService(
+	repo repository.EmailReceiptRepository,
+	sheetsReader sheets.Reader,
+	spreadsheetID string,
+	sheetName string,
+	chunkSize int,
+	logger *zap.Logger,
+) *EmailReceiptService {
+	if sheetName == "" {
+		sheetName = "Datos_Ventas"
+	}
+	if chunkSize <= 0 {
+		chunkSize = sheets.DefaultChunkSize
+	}
+	return &EmailReceiptService{
+		repo:          repo,
+		sheetsReader:  sheetsReader,
+		spreadsheetID: spreadsheetID,
+		sheetName:     sheetName,
+		chunkSize:     chunkSize,
+		logger:        logger,
+	}
 }
 
-// Sync fetches and ingests receipts for an explicit date range.
+// Sync fetches and ingests receipts from Google Sheets in paginated chunks.
 func (s *EmailReceiptService) Sync(ctx context.Context, req EmailReceiptSyncRequest) (SyncResult, error) {
-	if s.client == nil {
-		return SyncResult{}, fmt.Errorf("gmail integration is not configured")
+	if s.sheetsReader == nil {
+		return SyncResult{}, fmt.Errorf("google sheets integration is not configured")
 	}
 
-	from, to, err := parseDateRange(req.From, req.To)
-	if err != nil {
-		return SyncResult{}, err
+	var from, to *time.Time
+	if strings.TrimSpace(req.From) != "" || strings.TrimSpace(req.To) != "" {
+		f, t, err := parseDateRange(req.From, req.To)
+		if err != nil {
+			return SyncResult{}, err
+		}
+		from = &f
+		to = &t
 	}
 
-	return s.syncRange(ctx, from, to)
+	startRow := 2 // Row 1 is header
+	result := SyncResult{}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return result, ctx.Err()
+		default:
+		}
+
+		rows, err := s.sheetsReader.FetchChunk(ctx, s.spreadsheetID, s.sheetName, startRow, s.chunkSize)
+		if err != nil {
+			s.logger.Error("failed to fetch sheet chunk",
+				zap.Int("startRow", startRow),
+				zap.Error(err),
+			)
+			result.Errors++
+			return result, fmt.Errorf("failed to fetch chunk starting at row %d: %w", startRow, err)
+		}
+
+		if len(rows) == 0 {
+			break
+		}
+
+		result.Fetched += len(rows)
+		for idx, row := range rows {
+			receipt, parseErr := sheets.ParseRow(row)
+			if parseErr != nil {
+				s.logger.Warn("sheet row parsed with errors",
+					zap.Int("row", startRow+idx),
+					zap.Error(parseErr),
+				)
+				result.Errors++
+				continue
+			}
+
+			// If explicit date range filter was requested, verify timestamp is within range
+			if from != nil && to != nil {
+				d := receipt.ReceivedAt
+				if receipt.TransactionDate != nil {
+					d = *receipt.TransactionDate
+				}
+				if d.Before(*from) || !d.Before(*to) {
+					result.Skipped++
+					continue
+				}
+			}
+
+			inserted, err := s.repo.UpsertByMessageID(ctx, receipt)
+			if err != nil {
+				s.logger.Error("failed to persist sheet receipt",
+					zap.String("messageId", receipt.MessageID),
+					zap.Error(err),
+				)
+				result.Errors++
+				continue
+			}
+
+			if inserted {
+				result.Imported++
+			} else {
+				result.Skipped++
+			}
+		}
+
+		startRow += len(rows)
+		if len(rows) < s.chunkSize {
+			break
+		}
+	}
+
+	return result, nil
 }
 
-// SyncLastDay ingests receipts from the last 24 hours; used by the scheduler.
+// SyncLastDay ingests receipts from Google Sheets.
 func (s *EmailReceiptService) SyncLastDay(ctx context.Context) (SyncResult, error) {
-	if s.client == nil {
-		return SyncResult{}, fmt.Errorf("gmail integration is not configured")
-	}
-
-	now := time.Now()
-	return s.syncRange(ctx, now.Add(-24*time.Hour), now)
+	return s.Sync(ctx, EmailReceiptSyncRequest{})
 }
 
 // List returns stored receipts, optionally filtered by an inclusive date range.
@@ -68,19 +162,19 @@ func (s *EmailReceiptService) List(ctx context.Context, from, to *time.Time) ([]
 // GetRevenueSummary returns aggregated revenue metrics and daily timeline buckets.
 // If from or to are nil, it defaults to the current month in Colombia timezone.
 func (s *EmailReceiptService) GetRevenueSummary(ctx context.Context, from, to *time.Time) (*models.RevenueSummary, error) {
-	now := time.Now().In(email.Colombia)
+	now := time.Now().In(sheets.Colombia)
 
 	var start, end time.Time
 	if from != nil {
 		start = *from
 	} else {
-		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, email.Colombia)
+		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, sheets.Colombia)
 	}
 
 	if to != nil {
 		end = *to
 	} else {
-		end = time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, email.Colombia)
+		end = time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, sheets.Colombia)
 	}
 
 	if !start.Before(end) {
@@ -90,100 +184,15 @@ func (s *EmailReceiptService) GetRevenueSummary(ctx context.Context, from, to *t
 	return s.repo.GetRevenueSummary(ctx, start, end)
 }
 
-func (s *EmailReceiptService) syncRange(ctx context.Context, from, to time.Time) (SyncResult, error) {
-	messages, err := s.client.FetchMessages(ctx, from, to)
-	if err != nil {
-		return SyncResult{}, fmt.Errorf("failed to fetch messages: %w", err)
-	}
-
-	result := SyncResult{Fetched: len(messages)}
-	for _, raw := range messages {
-		receipt, parseErr := s.buildReceipt(raw)
-
-		inserted, err := s.repo.UpsertByMessageID(ctx, receipt)
-		if err != nil {
-			s.logger.Error("failed to persist email receipt",
-				zap.String("messageId", raw.ID), zap.Error(err))
-			result.Errors++
-			continue
-		}
-
-		if parseErr != nil {
-			s.logger.Warn("email receipt parsed with errors",
-				zap.String("messageId", raw.ID), zap.Error(parseErr))
-			result.Errors++
-			continue
-		}
-
-		if inserted {
-			result.Imported++
-		} else {
-			result.Skipped++
-		}
-	}
-
-	return result, nil
-}
-
-// buildReceipt maps a raw Gmail message into a persistable EmailReceipt. When
-// parsing fails, it still returns a receipt marked as "error" so the message is
-// recorded (and deduplicated) rather than retried forever.
-func (s *EmailReceiptService) buildReceipt(raw email.RawMessage) (*models.EmailReceipt, error) {
-	receipt := &models.EmailReceipt{
-		MessageID: raw.ID,
-		Currency:  "COP",
-		Status:    "imported",
-	}
-
-	msg, err := email.ParseMessage(raw.Raw)
-	if err != nil {
-		receipt.Status = "error"
-		receipt.ReceivedAt = internalTimestamp(raw.InternalTS)
-		parseErrMsg := err.Error()
-		receipt.ParseError = &parseErrMsg
-		return receipt, fmt.Errorf("failed to parse message body: %w", err)
-	}
-
-	receipt.Sender = msg.Sender
-	receipt.Subject = msg.Subject
-	receipt.RawBody = &msg.Body
-	if !msg.Date.IsZero() {
-		receipt.ReceivedAt = msg.Date
-	} else {
-		receipt.ReceivedAt = internalTimestamp(raw.InternalTS)
-	}
-
-	parsed, err := email.ParseReceipt(msg.Body)
-	if err != nil {
-		receipt.Status = "error"
-		parseErr := err.Error()
-		receipt.ParseError = &parseErr
-		return receipt, err
-	}
-
-	receipt.Amount = &parsed.Amount
-	receipt.Currency = parsed.Currency
-	receipt.Payer = strPtr(parsed.Payer)
-	receipt.Bank = strPtr(parsed.Bank)
-	receipt.Reference = strPtr(parsed.Reference)
-	receipt.TransactionNumber = strPtr(parsed.TransactionNumber)
-	receipt.PaymentMethod = strPtr(parsed.PaymentMethod)
-	if !parsed.TransactionDate.IsZero() {
-		receipt.TransactionDate = &parsed.TransactionDate
-	}
-
-	return receipt, nil
-}
-
 // parseDateRange converts two inclusive YYYY-MM-DD dates into a half-open
 // [from, to) range in Colombia time (so the "to" day is fully included).
 func parseDateRange(fromStr, toStr string) (time.Time, time.Time, error) {
-	from, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(fromStr), email.Colombia)
+	from, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(fromStr), sheets.Colombia)
 	if err != nil {
 		return time.Time{}, time.Time{}, fmt.Errorf("invalid 'from' date, expected YYYY-MM-DD")
 	}
 
-	to, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(toStr), email.Colombia)
+	to, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(toStr), sheets.Colombia)
 	if err != nil {
 		return time.Time{}, time.Time{}, fmt.Errorf("invalid 'to' date, expected YYYY-MM-DD")
 	}
@@ -193,18 +202,4 @@ func parseDateRange(fromStr, toStr string) (time.Time, time.Time, error) {
 	}
 
 	return from, to.AddDate(0, 0, 1), nil
-}
-
-func internalTimestamp(millis int64) time.Time {
-	if millis <= 0 {
-		return time.Now().UTC()
-	}
-	return time.UnixMilli(millis).UTC()
-}
-
-func strPtr(s string) *string {
-	if strings.TrimSpace(s) == "" {
-		return nil
-	}
-	return &s
 }
