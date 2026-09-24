@@ -161,7 +161,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Reads receipt emails from the configured Gmail inbox for a date range and stores the sale details. Requires the ayurami-admin role.",
+                "description": "Reads receipt registers from the configured Google Sheets document in chunks and stores new sale details. Requires the ayurami-admin role.",
                 "consumes": [
                     "application/json"
                 ],
@@ -171,13 +171,12 @@ const docTemplate = `{
                 "tags": [
                     "email-receipts"
                 ],
-                "summary": "Sync bank receipts from the email inbox",
+                "summary": "Sync bank receipts from Google Sheets",
                 "parameters": [
                     {
-                        "description": "Date range (from/to as YYYY-MM-DD)",
+                        "description": "Optional date range (from/to as YYYY-MM-DD)",
                         "name": "range",
                         "in": "body",
-                        "required": true,
                         "schema": {
                             "$ref": "#/definitions/service.EmailReceiptSyncRequest"
                         }

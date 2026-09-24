@@ -38,9 +38,9 @@ go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g cmd/api/main.go -o docs
 
 ---
 
-## 📬 Gmail Bank-Receipt Ingestion
+## 📊 Google Sheets Bank-Receipt Ingestion
 
-This API can read digital-payment receipt emails (e.g. **Nequi Bre-B**) from a Gmail inbox, parse the sale details and store them in the `email_receipts` table.
+This API can read digital-payment receipt registers (e.g. **Nequi Bre-B**) from a Google Sheets spreadsheet, parse the sale details, and store them in the `email_receipts` table in paginated 50-row chunks.
 
 ### Configuration
 
@@ -48,20 +48,22 @@ Set the following environment variables (see `.env.example`):
 
 | Variable | Description |
 | :--- | :--- |
-| `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` / `GMAIL_REFRESH_TOKEN` | OAuth 2.0 credentials with the `gmail.readonly` scope |
-| `GMAIL_TARGET_EMAIL` | Inbox to read (defaults to `me`) |
-| `GMAIL_LABEL` | Optional Gmail label to restrict the search |
-| `GMAIL_SENDER_FILTER` | Only ingest messages from this sender (e.g. `notificaciones@nequi.com.co`) |
-| `EMAIL_SYNC_CRON` | Cron expression for the background sync (e.g. `0 6 * * *`). Empty disables it |
+| `GOOGLE_SHEETS_SPREADSHEET_ID` | Google Spreadsheet ID (default: `1W_qTHc3RxTwwjCItOwCrRbnI34-63nLuLqG5it5LY7E`) |
+| `GOOGLE_SHEETS_RANGE` | Sheet/Tab name (default: `Datos_Ventas`) |
+| `GOOGLE_SHEETS_CHUNK_SIZE` | Batch size for paginated row fetches (default: `50`) |
+| `GOOGLE_SHEETS_CREDENTIALS_JSON` | Service Account JSON credentials (inline string or base64) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to Service Account JSON key file |
+| `EMAIL_SYNC_CRON` | Optional cron expression for background sync. Empty disables it (on-demand only) |
 
-If the Gmail credentials are missing, the API still starts but the integration is disabled (the manual endpoint returns an error and the scheduler is not started).
+If Google credentials are missing, the API still starts but the sync integration is disabled (the sync endpoint returns an informative error).
 
 ### Endpoints
 
-- `POST /api/v1/email-receipts/sync` *(admin)* — body `{ "from": "2026-09-01", "to": "2026-09-21" }` (inclusive dates). Fetches, parses and upserts the receipts for the range and returns a summary (`fetched`, `imported`, `skipped`, `errors`).
+- `POST /api/v1/email-receipts/sync` *(admin)* — on-demand sync; optional body `{ "from": "2026-09-01", "to": "2026-09-21" }`. Reads sheet rows in chunks, parses and upserts new receipts, and returns a summary (`fetched`, `imported`, `skipped`, `errors`).
 - `GET /api/v1/email-receipts` *(admin / salesperson)* — lists stored receipts, optionally filtered with `?from=YYYY-MM-DD&to=YYYY-MM-DD`.
+- `GET /api/v1/email-receipts/summary` *(admin / salesperson)* — revenue metrics, growth, and daily timeline buckets.
 
-Ingestion is idempotent: receipts are deduplicated on the Gmail `message_id`, so re-running a date range is safe.
+Ingestion is idempotent: receipts are deduplicated on the `message_id` (Column J: `ID Mensaje`), so re-running a sync is always safe.
 
 ### Database
 

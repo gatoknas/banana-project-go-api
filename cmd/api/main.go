@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -18,11 +19,11 @@ import (
 	_ "org.banana.project/api/docs"
 	"org.banana.project/api/internal/auth"
 	"org.banana.project/api/internal/database"
-	"org.banana.project/api/internal/email"
 	"org.banana.project/api/internal/handlers"
 	"org.banana.project/api/internal/middleware"
 	"org.banana.project/api/internal/repository"
 	"org.banana.project/api/internal/service"
+	"org.banana.project/api/internal/sheets"
 )
 
 // @title           Banana Project Go REST API
@@ -204,27 +205,42 @@ func setupRouter(logger *zap.Logger) http.Handler {
 
 	protectedMux.Handle("GET /categories", salesAndAdmin(http.HandlerFunc(categoryHandler.List)))
 
-	// Wire email receipt dependencies (Gmail bank-receipt ingestion)
+	// Wire email receipt dependencies (Google Sheets bank-receipt ingestion)
 	emailRepo := repository.NewSQLEmailReceiptRepository(database.DB)
-	gmailClient, err := email.NewClient(context.Background(), email.Config{
-		ClientID:     os.Getenv("GMAIL_CLIENT_ID"),
-		ClientSecret: os.Getenv("GMAIL_CLIENT_SECRET"),
-		RefreshToken: os.Getenv("GMAIL_REFRESH_TOKEN"),
-		TargetEmail:  os.Getenv("GMAIL_TARGET_EMAIL"),
-		Label:        os.Getenv("GMAIL_LABEL"),
-		SenderFilter: os.Getenv("GMAIL_SENDER_FILTER"),
+	chunkSize := sheets.DefaultChunkSize
+	if rawChunk := os.Getenv("GOOGLE_SHEETS_CHUNK_SIZE"); rawChunk != "" {
+		if parsed, err := strconv.Atoi(rawChunk); err == nil && parsed > 0 {
+			chunkSize = parsed
+		}
+	}
+
+	spreadsheetID := os.Getenv("GOOGLE_SHEETS_SPREADSHEET_ID")
+	if spreadsheetID == "" {
+		spreadsheetID = "1W_qTHc3RxTwwjCItOwCrRbnI34-63nLuLqG5it5LY7E"
+	}
+	sheetName := os.Getenv("GOOGLE_SHEETS_RANGE")
+	if sheetName == "" {
+		sheetName = "Datos_Ventas"
+	}
+
+	sheetsClient, err := sheets.NewClient(context.Background(), sheets.Config{
+		CredentialsJSON: os.Getenv("GOOGLE_SHEETS_CREDENTIALS_JSON"),
+		CredentialsFile: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"),
+		SpreadsheetID:   spreadsheetID,
+		SheetName:       sheetName,
+		ChunkSize:       chunkSize,
 	})
 	if err != nil {
-		logger.Warn("Gmail email-receipt integration is disabled", zap.Error(err))
+		logger.Warn("Google Sheets receipt integration is disabled or not configured", zap.Error(err))
 	}
-	emailService := service.NewEmailReceiptService(emailRepo, gmailClient, logger)
+	emailService := service.NewEmailReceiptService(emailRepo, sheetsClient, spreadsheetID, sheetName, chunkSize, logger)
 	emailHandler := handlers.NewEmailReceiptHandler(emailService, logger)
 
 	protectedMux.Handle("POST /email-receipts/sync", adminOnly(http.HandlerFunc(emailHandler.Sync)))
 	protectedMux.Handle("GET /email-receipts", salesAndAdmin(http.HandlerFunc(emailHandler.List)))
 	protectedMux.Handle("GET /email-receipts/summary", salesAndAdmin(http.HandlerFunc(emailHandler.Summary)))
 
-	if gmailClient != nil {
+	if sheetsClient != nil {
 		startEmailSyncScheduler(emailService, logger)
 	}
 

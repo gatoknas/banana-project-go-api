@@ -382,13 +382,12 @@ paths:
     post:
       consumes:
       - application/json
-      description: Reads receipt emails from the configured Gmail inbox for a date
-        range and stores the sale details. Requires the ayurami-admin role.
+      description: Reads receipt registers from the configured Google Sheets document
+        in chunks and stores new sale details. Requires the ayurami-admin role.
       parameters:
-      - description: Date range (from/to as YYYY-MM-DD)
+      - description: Optional date range (from/to as YYYY-MM-DD)
         in: body
         name: range
-        required: true
         schema:
           $ref: '#/definitions/service.EmailReceiptSyncRequest'
       produces:
@@ -408,7 +407,7 @@ paths:
             type: string
       security:
       - BearerAuth: []
-      summary: Sync bank receipts from the email inbox
+      summary: Sync bank receipts from Google Sheets
       tags:
       - email-receipts
   /api/v1/products:

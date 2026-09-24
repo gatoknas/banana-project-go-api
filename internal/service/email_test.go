@@ -3,12 +3,14 @@ package service_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"go.uber.org/zap"
 	"org.banana.project/api/internal/models"
 	"org.banana.project/api/internal/service"
+	"org.banana.project/api/internal/sheets"
 )
 
 type MockEmailReceiptRepo struct {
@@ -54,7 +56,189 @@ func (m *MockEmailReceiptRepo) GetRevenueSummary(ctx context.Context, from, to t
 	return nil, nil
 }
 
-func TestEmailReceiptService(t *testing.T) {
+type MockSheetsReader struct {
+	FetchChunkFunc func(ctx context.Context, spreadsheetID, sheetName string, startRow, limit int) ([][]any, error)
+}
+
+func (m *MockSheetsReader) FetchChunk(ctx context.Context, spreadsheetID, sheetName string, startRow, limit int) ([][]any, error) {
+	if m.FetchChunkFunc != nil {
+		return m.FetchChunkFunc(ctx, spreadsheetID, sheetName, startRow, limit)
+	}
+	return nil, nil
+}
+
+func TestEmailReceiptService_Sync(t *testing.T) {
+	logger := zap.NewNop()
+
+	sampleRow1 := []any{"2026-09-24 10:00:00", "$ 15.000", "imported", "2026-09-24", "User 1", "Nequi", "REF1", "TRX1", "QR", "MSG-1"}
+	sampleRow2 := []any{"2026-09-24 11:00:00", "$ 25.000", "imported", "2026-09-24", "User 2", "Nequi", "REF2", "TRX2", "QR", "MSG-2"}
+	invalidRow := []any{"2026-09-24", "$ 10.000", "imported", "2026-09-24", "User 3", "Nequi", "REF3", "TRX3", "QR", ""} // missing MSG-ID
+
+	tests := []struct {
+		name         string
+		mockRepo     *MockEmailReceiptRepo
+		mockSheets   *MockSheetsReader
+		req          service.EmailReceiptSyncRequest
+		wantFetched  int
+		wantImported int
+		wantSkipped  int
+		wantErrors   int
+		wantErr      bool
+	}{
+		{
+			name: "single chunk success with new and duplicate rows",
+			mockRepo: &MockEmailReceiptRepo{
+				UpsertByMessageIDFunc: func(ctx context.Context, receipt *models.EmailReceipt) (bool, error) {
+					if receipt.MessageID == "MSG-1" {
+						return true, nil // inserted
+					}
+					return false, nil // skipped/already exists
+				},
+			},
+			mockSheets: &MockSheetsReader{
+				FetchChunkFunc: func(ctx context.Context, spreadsheetID, sheetName string, startRow, limit int) ([][]any, error) {
+					if startRow == 2 {
+						return [][]any{sampleRow1, sampleRow2}, nil
+					}
+					return [][]any{}, nil
+				},
+			},
+			req:          service.EmailReceiptSyncRequest{},
+			wantFetched:  2,
+			wantImported: 1,
+			wantSkipped:  1,
+			wantErrors:   0,
+			wantErr:      false,
+		},
+		{
+			name: "multi-chunk pagination until EOF",
+			mockRepo: &MockEmailReceiptRepo{
+				UpsertByMessageIDFunc: func(ctx context.Context, receipt *models.EmailReceipt) (bool, error) {
+					return true, nil
+				},
+			},
+			mockSheets: &MockSheetsReader{
+				FetchChunkFunc: func(ctx context.Context, spreadsheetID, sheetName string, startRow, limit int) ([][]any, error) {
+					if startRow == 2 {
+						return [][]any{sampleRow1, sampleRow2}, nil // full chunk (limit=2)
+					}
+					return [][]any{}, nil // EOF
+				},
+			},
+			req:          service.EmailReceiptSyncRequest{},
+			wantFetched:  2,
+			wantImported: 2,
+			wantSkipped:  0,
+			wantErrors:   0,
+			wantErr:      false,
+		},
+		{
+			name: "sheet with invalid row increments error count and continues",
+			mockRepo: &MockEmailReceiptRepo{
+				UpsertByMessageIDFunc: func(ctx context.Context, receipt *models.EmailReceipt) (bool, error) {
+					return true, nil
+				},
+			},
+			mockSheets: &MockSheetsReader{
+				FetchChunkFunc: func(ctx context.Context, spreadsheetID, sheetName string, startRow, limit int) ([][]any, error) {
+					if startRow == 2 {
+						return [][]any{invalidRow, sampleRow1}, nil
+					}
+					return [][]any{}, nil
+				},
+			},
+			req:          service.EmailReceiptSyncRequest{},
+			wantFetched:  2,
+			wantImported: 1,
+			wantSkipped:  0,
+			wantErrors:   1,
+			wantErr:      false,
+		},
+		{
+			name: "database error on upsert increments error count",
+			mockRepo: &MockEmailReceiptRepo{
+				UpsertByMessageIDFunc: func(ctx context.Context, receipt *models.EmailReceipt) (bool, error) {
+					return false, errors.New("db connection failure")
+				},
+			},
+			mockSheets: &MockSheetsReader{
+				FetchChunkFunc: func(ctx context.Context, spreadsheetID, sheetName string, startRow, limit int) ([][]any, error) {
+					if startRow == 2 {
+						return [][]any{sampleRow1}, nil
+					}
+					return [][]any{}, nil
+				},
+			},
+			req:          service.EmailReceiptSyncRequest{},
+			wantFetched:  1,
+			wantImported: 0,
+			wantSkipped:  0,
+			wantErrors:   1,
+			wantErr:      false,
+		},
+		{
+			name:       "nil sheets reader returns error",
+			mockRepo:   &MockEmailReceiptRepo{},
+			mockSheets: nil,
+			req:        service.EmailReceiptSyncRequest{},
+			wantErr:    true,
+		},
+		{
+			name:       "invalid date range returns error",
+			mockRepo:   &MockEmailReceiptRepo{},
+			mockSheets: &MockSheetsReader{},
+			req: service.EmailReceiptSyncRequest{
+				From: "invalid-date",
+				To:   "2026-09-24",
+			},
+			wantErr: true,
+		},
+		{
+			name: "sheets fetch failure returns error",
+			mockRepo: &MockEmailReceiptRepo{},
+			mockSheets: &MockSheetsReader{
+				FetchChunkFunc: func(ctx context.Context, spreadsheetID, sheetName string, startRow, limit int) ([][]any, error) {
+					return nil, fmt.Errorf("network timeout")
+				},
+			},
+			req:     service.EmailReceiptSyncRequest{},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var reader sheets.Reader
+			if tt.mockSheets != nil {
+				reader = tt.mockSheets
+			}
+			svc := service.NewEmailReceiptService(tt.mockRepo, reader, "sheet-id", "Datos_Ventas", 2, logger)
+			got, err := svc.Sync(context.Background(), tt.req)
+
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Sync() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+
+			if got.Fetched != tt.wantFetched {
+				t.Errorf("got.Fetched = %d, want %d", got.Fetched, tt.wantFetched)
+			}
+			if got.Imported != tt.wantImported {
+				t.Errorf("got.Imported = %d, want %d", got.Imported, tt.wantImported)
+			}
+			if got.Skipped != tt.wantSkipped {
+				t.Errorf("got.Skipped = %d, want %d", got.Skipped, tt.wantSkipped)
+			}
+			if got.Errors != tt.wantErrors {
+				t.Errorf("got.Errors = %d, want %d", got.Errors, tt.wantErrors)
+			}
+		})
+	}
+}
+
+func TestEmailReceiptService_List(t *testing.T) {
 	logger := zap.NewNop()
 	now := time.Now()
 
@@ -85,7 +269,7 @@ func TestEmailReceiptService(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := service.NewEmailReceiptService(tt.mockRepo, nil, logger)
+			svc := service.NewEmailReceiptService(tt.mockRepo, nil, "sheet-id", "Datos_Ventas", 50, logger)
 			res, err := svc.List(context.Background(), tt.from, tt.to)
 
 			if (err != nil) != tt.wantErr {
@@ -96,14 +280,6 @@ func TestEmailReceiptService(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("Sync without client returns error", func(t *testing.T) {
-		svc := service.NewEmailReceiptService(&MockEmailReceiptRepo{}, nil, logger)
-		_, err := svc.Sync(context.Background(), service.EmailReceiptSyncRequest{From: "2026-01-01", To: "2026-01-02"})
-		if err == nil {
-			t.Errorf("expected error when client is nil, got nil")
-		}
-	})
 }
 
 func TestEmailReceiptService_GetRevenueSummary(t *testing.T) {
@@ -176,7 +352,7 @@ func TestEmailReceiptService_GetRevenueSummary(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := service.NewEmailReceiptService(tt.mockRepo, nil, logger)
+			svc := service.NewEmailReceiptService(tt.mockRepo, nil, "sheet-id", "Datos_Ventas", 50, logger)
 			res, err := svc.GetRevenueSummary(context.Background(), tt.from, tt.to)
 
 			if (err != nil) != tt.wantErr {
@@ -191,3 +367,24 @@ func TestEmailReceiptService_GetRevenueSummary(t *testing.T) {
 	}
 }
 
+func TestEmailReceiptService_SyncLastDay(t *testing.T) {
+	logger := zap.NewNop()
+	called := false
+	mockSheets := &MockSheetsReader{
+		FetchChunkFunc: func(ctx context.Context, spreadsheetID, sheetName string, startRow, limit int) ([][]any, error) {
+			called = true
+			return [][]any{}, nil
+		},
+	}
+	svc := service.NewEmailReceiptService(&MockEmailReceiptRepo{}, mockSheets, "sheet-id", "Datos_Ventas", 50, logger)
+	res, err := svc.SyncLastDay(context.Background())
+	if err != nil {
+		t.Fatalf("SyncLastDay() error = %v", err)
+	}
+	if !called {
+		t.Errorf("expected FetchChunk to be called")
+	}
+	if res.Fetched != 0 {
+		t.Errorf("expected 0 fetched, got %d", res.Fetched)
+	}
+}
