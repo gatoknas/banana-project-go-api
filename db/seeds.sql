@@ -16,5 +16,8 @@ INSERT INTO units_of_measure (name, abbreviation) VALUES
 ('Jarra', 'jr'),
 ('Vaso', 'vs'),
 ('Libra', 'lb'),
-('Vulto', 'vt'),
-('Paquete', 'paq');
+('Bulto', 'bl'),
+('Paquete', 'paq'),
+('Gramo', 'g'),
+('Mililitro', 'ml'),
+('Litro', 'lt');

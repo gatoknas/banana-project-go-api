@@ -205,6 +205,13 @@ func setupRouter(logger *zap.Logger) http.Handler {
 
 	protectedMux.Handle("GET /categories", salesAndAdmin(http.HandlerFunc(categoryHandler.List)))
 
+	// Wire unit of measure dependencies
+	unitRepo := repository.NewSQLUnitOfMeasureRepository(database.DB)
+	unitService := service.NewUnitOfMeasureService(unitRepo)
+	unitHandler := handlers.NewUnitOfMeasureHandler(unitService, logger)
+
+	protectedMux.Handle("GET /units-of-measure", salesAndAdmin(http.HandlerFunc(unitHandler.List)))
+
 	// Wire email receipt dependencies (Google Sheets bank-receipt ingestion)
 	emailRepo := repository.NewSQLEmailReceiptRepository(database.DB)
 	chunkSize := sheets.DefaultChunkSize
