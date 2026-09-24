@@ -152,3 +152,124 @@ func TestCreateProduct(t *testing.T) {
 		})
 	}
 }
+
+func TestListProducts(t *testing.T) {
+	cat := "Frutas"
+	unit := "Kilo"
+	abbr := "kg"
+	sampleProducts := []models.Product{
+		{
+			ID:               1,
+			Name:             "Banano",
+			CategoryName:     &cat,
+			UnitName:         &unit,
+			UnitAbbreviation: &abbr,
+			CurrentStock:     50.0,
+			MinimumStock:     10.0,
+		},
+	}
+
+	tests := []struct {
+		name        string
+		mockSetup   func(m *MockProductRepository)
+		expectedLen int
+		expectErr   bool
+	}{
+		{
+			name: "Success with products",
+			mockSetup: func(m *MockProductRepository) {
+				m.ListFunc = func(ctx context.Context) ([]models.Product, error) {
+					return sampleProducts, nil
+				}
+			},
+			expectedLen: 1,
+			expectErr:   false,
+		},
+		{
+			name: "Repository error",
+			mockSetup: func(m *MockProductRepository) {
+				m.ListFunc = func(ctx context.Context) ([]models.Product, error) {
+					return nil, errors.New("db query error")
+				}
+			},
+			expectedLen: 0,
+			expectErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &MockProductRepository{}
+			tt.mockSetup(repo)
+
+			svc := service.NewProductService(repo, nil)
+			list, err := svc.ListProducts(context.Background())
+
+			if (err != nil) != tt.expectErr {
+				t.Fatalf("expected error: %v, got: %v", tt.expectErr, err)
+			}
+			if !tt.expectErr {
+				if len(list) != tt.expectedLen {
+					t.Errorf("expected %d products, got %d", tt.expectedLen, len(list))
+				}
+				if len(list) > 0 && list[0].CurrentStock != 50.0 {
+					t.Errorf("expected current stock 50.0, got %f", list[0].CurrentStock)
+				}
+			}
+		})
+	}
+}
+
+func TestGetProduct(t *testing.T) {
+	sample := &models.Product{
+		ID:           1,
+		Name:         "Banano",
+		CurrentStock: 25.5,
+	}
+
+	tests := []struct {
+		name      string
+		id        int64
+		mockSetup func(m *MockProductRepository)
+		expectErr bool
+	}{
+		{
+			name: "Success found",
+			id:   1,
+			mockSetup: func(m *MockProductRepository) {
+				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Product, error) {
+					return sample, nil
+				}
+			},
+			expectErr: false,
+		},
+		{
+			name: "Not found error",
+			id:   999,
+			mockSetup: func(m *MockProductRepository) {
+				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Product, error) {
+					return nil, errors.New("not found")
+				}
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &MockProductRepository{}
+			tt.mockSetup(repo)
+
+			svc := service.NewProductService(repo, nil)
+			prod, err := svc.GetProduct(context.Background(), tt.id)
+
+			if (err != nil) != tt.expectErr {
+				t.Fatalf("expected error: %v, got: %v", tt.expectErr, err)
+			}
+			if !tt.expectErr && (prod == nil || prod.CurrentStock != 25.5) {
+				t.Errorf("expected product with stock 25.5, got %v", prod)
+			}
+		})
+	}
+}
+

@@ -1417,9 +1417,17 @@ const docTemplate = `{
                     "description": "CategoryID is the reference ID of the category (Spanish: ID Categoría).",
                     "type": "integer"
                 },
+                "categoryName": {
+                    "description": "CategoryName is the name of the category (Spanish: Nombre Categoría).",
+                    "type": "string"
+                },
                 "createdAt": {
                     "description": "CreatedAt is the creation timestamp (Spanish: Creado En).",
                     "type": "string"
+                },
+                "currentStock": {
+                    "description": "CurrentStock is the real-time stock from inventories (Spanish: Stock Actual).",
+                    "type": "number"
                 },
                 "description": {
                     "description": "Description is the optional product description (Spanish: Descripción).",
@@ -1433,6 +1441,14 @@ const docTemplate = `{
                     "description": "IsForSale defines if it can be sold in the POS (Spanish: Es Para Venta).",
                     "type": "boolean"
                 },
+                "maximumStock": {
+                    "description": "MaximumStock is the maximum storage limit from inventories (Spanish: Stock Máximo).",
+                    "type": "number"
+                },
+                "minimumStock": {
+                    "description": "MinimumStock is the minimum reorder threshold from inventories (Spanish: Stock Mínimo).",
+                    "type": "number"
+                },
                 "name": {
                     "description": "Name is the commercial name (Spanish: Nombre).",
                     "type": "string"
@@ -1444,6 +1460,14 @@ const docTemplate = `{
                 "sellPrice": {
                     "description": "SellPrice is the price for customers, can be 0 for pure ingredients (Spanish: Precio de Venta).",
                     "type": "number"
+                },
+                "unitAbbreviation": {
+                    "description": "UnitAbbreviation is the abbreviation of the unit of measure (Spanish: Abreviatura Unidad).",
+                    "type": "string"
+                },
+                "unitName": {
+                    "description": "UnitName is the name of the unit of measure (Spanish: Nombre Unidad).",
+                    "type": "string"
                 },
                 "unitOfMeasureId": {
                     "description": "UnitOfMeasureID is the reference ID of the unit of measure (Spanish: ID Unidad de Medida).",

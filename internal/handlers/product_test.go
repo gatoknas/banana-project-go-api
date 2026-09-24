@@ -169,16 +169,31 @@ func TestProductHandler_List(t *testing.T) {
 		repo       *MockProductRepo
 		wantStatus int
 		wantCount  int
+		wantStock  float64
 	}{
 		{
-			name: "success",
+			name: "success with inventory stock",
 			repo: &MockProductRepo{
 				ListFunc: func(ctx context.Context) ([]models.Product, error) {
-					return []models.Product{{ID: 1, Name: "A"}}, nil
+					cat := "Frutas"
+					unit := "Kilo"
+					abbr := "kg"
+					return []models.Product{
+						{
+							ID:               1,
+							Name:             "Banano Criollo",
+							CategoryName:     &cat,
+							UnitName:         &unit,
+							UnitAbbreviation: &abbr,
+							CurrentStock:     42.5,
+							MinimumStock:     10.0,
+						},
+					}, nil
 				},
 			},
 			wantStatus: http.StatusOK,
 			wantCount:  1,
+			wantStock:  42.5,
 		},
 		{
 			name: "repository error",
@@ -209,6 +224,9 @@ func TestProductHandler_List(t *testing.T) {
 				}
 				if len(resp) != tt.wantCount {
 					t.Errorf("expected %d products, got %d", tt.wantCount, len(resp))
+				}
+				if len(resp) > 0 && resp[0].CurrentStock != tt.wantStock {
+					t.Errorf("expected current stock %f, got %f", tt.wantStock, resp[0].CurrentStock)
 				}
 			}
 		})

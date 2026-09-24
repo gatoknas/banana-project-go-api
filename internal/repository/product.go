@@ -30,11 +30,22 @@ func NewSQLProductRepository(db *sql.DB) *SQLProductRepository {
 func (r *SQLProductRepository) GetByID(ctx context.Context, id int64) (*models.Product, error) {
 	var p models.Product
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, name, description, category_id, unit_of_measure_id, sell_price, average_cost, is_for_sale, requires_recipe, created_at, updated_at 
-		 FROM products WHERE id = $1`,
+		`SELECT 
+			p.id, p.name, p.description, p.category_id, c.name, 
+			p.unit_of_measure_id, u.name, u.abbreviation,
+			COALESCE(inv.current_stock, 0), COALESCE(inv.minimum_stock, 0), COALESCE(inv.maximum_stock, 0),
+			p.sell_price, p.average_cost, p.is_for_sale, p.requires_recipe, 
+			p.created_at, p.updated_at
+		 FROM products p
+		 LEFT JOIN categories c ON c.id = p.category_id
+		 LEFT JOIN units_of_measure u ON u.id = p.unit_of_measure_id
+		 LEFT JOIN inventories inv ON inv.product_id = p.id
+		 WHERE p.id = $1`,
 		id,
 	).Scan(
-		&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.UnitOfMeasureID,
+		&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.CategoryName,
+		&p.UnitOfMeasureID, &p.UnitName, &p.UnitAbbreviation,
+		&p.CurrentStock, &p.MinimumStock, &p.MaximumStock,
 		&p.SellPrice, &p.AverageCost, &p.IsForSale, &p.RequiresRecipe,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
@@ -46,7 +57,17 @@ func (r *SQLProductRepository) GetByID(ctx context.Context, id int64) (*models.P
 
 func (r *SQLProductRepository) List(ctx context.Context) ([]models.Product, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, name, description, category_id, unit_of_measure_id, sell_price, average_cost, is_for_sale, requires_recipe, created_at, updated_at FROM products ORDER BY name ASC`,
+		`SELECT 
+			p.id, p.name, p.description, p.category_id, c.name, 
+			p.unit_of_measure_id, u.name, u.abbreviation,
+			COALESCE(inv.current_stock, 0), COALESCE(inv.minimum_stock, 0), COALESCE(inv.maximum_stock, 0),
+			p.sell_price, p.average_cost, p.is_for_sale, p.requires_recipe, 
+			p.created_at, p.updated_at
+		 FROM products p
+		 LEFT JOIN categories c ON c.id = p.category_id
+		 LEFT JOIN units_of_measure u ON u.id = p.unit_of_measure_id
+		 LEFT JOIN inventories inv ON inv.product_id = p.id
+		 ORDER BY p.name ASC`,
 	)
 	if err != nil {
 		return nil, err
@@ -57,7 +78,9 @@ func (r *SQLProductRepository) List(ctx context.Context) ([]models.Product, erro
 	for rows.Next() {
 		var p models.Product
 		err := rows.Scan(
-			&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.UnitOfMeasureID,
+			&p.ID, &p.Name, &p.Description, &p.CategoryID, &p.CategoryName,
+			&p.UnitOfMeasureID, &p.UnitName, &p.UnitAbbreviation,
+			&p.CurrentStock, &p.MinimumStock, &p.MaximumStock,
 			&p.SellPrice, &p.AverageCost, &p.IsForSale, &p.RequiresRecipe,
 			&p.CreatedAt, &p.UpdatedAt,
 		)
