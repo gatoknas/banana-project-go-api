@@ -47,13 +47,17 @@ func (h *SupplierHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	id, err := h.service.CreateSupplier(ctx, req)
 	if err != nil {
-		if errors.Is(err, service.ErrCompanyNameRequired) || errors.Is(err, service.ErrTaxIDRequired) {
+		if errors.Is(err, service.ErrCompanyNameRequired) || errors.Is(err, service.ErrPhoneRequired) {
 			h.logger.Warn("supplier creation validation failed", zap.Error(err))
 			http.Error(w, fmt.Sprintf("Bad request: %v", err), http.StatusBadRequest)
 			return
 		}
 		if errors.Is(err, service.ErrTaxIDAlreadyExists) {
-			h.logger.Warn("supplier creation conflict: tax_id exists", zap.String("tax_id", req.TaxID))
+			taxIDVal := ""
+			if req.TaxID != nil {
+				taxIDVal = *req.TaxID
+			}
+			h.logger.Warn("supplier creation conflict: tax_id exists", zap.String("tax_id", taxIDVal))
 			http.Error(w, "Conflict: tax_id already registered", http.StatusConflict)
 			return
 		}
@@ -170,7 +174,7 @@ func (h *SupplierHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.UpdateSupplier(ctx, id, req); err != nil {
-		if errors.Is(err, service.ErrCompanyNameRequired) || errors.Is(err, service.ErrTaxIDRequired) {
+		if errors.Is(err, service.ErrCompanyNameRequired) || errors.Is(err, service.ErrPhoneRequired) {
 			http.Error(w, fmt.Sprintf("Bad request: %v", err), http.StatusBadRequest)
 			return
 		}

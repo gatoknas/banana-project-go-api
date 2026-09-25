@@ -17,6 +17,10 @@ import (
 	"org.banana.project/api/internal/service"
 )
 
+func strPtr(s string) *string {
+	return &s
+}
+
 type MockSupplierRepoForHandler struct {
 	CreateFunc       func(ctx context.Context, tx *sql.Tx, s *models.Supplier) (int64, error)
 	GetByIDFunc      func(ctx context.Context, id int64) (*models.Supplier, error)
@@ -65,12 +69,22 @@ func TestSupplierHandler_Create(t *testing.T) {
 		expectedStatus int
 	}{
 		{
-			name: "Success 201 Created",
-			body: `{"taxId": "900123", "companyName": "Fruit Express"}`,
+			name: "Success 201 Created with Tax ID and Phone",
+			body: `{"taxId": "900123", "companyName": "Fruit Express", "phone": "+57 300 123"}`,
 			mockSetup: func(m *MockSupplierRepoForHandler) {
 				m.GetByTaxIDFunc = func(ctx context.Context, taxID string) (*models.Supplier, error) {
 					return nil, sql.ErrNoRows
 				}
+				m.CreateFunc = func(ctx context.Context, tx *sql.Tx, s *models.Supplier) (int64, error) {
+					return 10, nil
+				}
+			},
+			expectedStatus: http.StatusCreated,
+		},
+		{
+			name: "Success 201 Created without Tax ID (Optional)",
+			body: `{"companyName": "Fruit Express", "phone": "+57 300 123"}`,
+			mockSetup: func(m *MockSupplierRepoForHandler) {
 				m.CreateFunc = func(ctx context.Context, tx *sql.Tx, s *models.Supplier) (int64, error) {
 					return 10, nil
 				}
@@ -85,20 +99,22 @@ func TestSupplierHandler_Create(t *testing.T) {
 		},
 		{
 			name: "Validation error missing company name 400",
-			body: `{"taxId": "900123", "companyName": ""}`,
-			mockSetup: func(m *MockSupplierRepoForHandler) {
-				m.GetByTaxIDFunc = func(ctx context.Context, taxID string) (*models.Supplier, error) {
-					return nil, sql.ErrNoRows
-				}
-			},
+			body: `{"phone": "+57 300 123", "companyName": ""}`,
+			mockSetup: func(m *MockSupplierRepoForHandler) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "Validation error missing phone 400",
+			body: `{"companyName": "Fruit Express"}`,
+			mockSetup: func(m *MockSupplierRepoForHandler) {},
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name: "Conflict tax_id already registered 409",
-			body: `{"taxId": "900123", "companyName": "Fruit Express"}`,
+			body: `{"taxId": "900123", "companyName": "Fruit Express", "phone": "+57 300 123"}`,
 			mockSetup: func(m *MockSupplierRepoForHandler) {
 				m.GetByTaxIDFunc = func(ctx context.Context, taxID string) (*models.Supplier, error) {
-					return &models.Supplier{ID: 1, TaxID: "900123"}, nil
+					return &models.Supplier{ID: 1, TaxID: strPtr("900123")}, nil
 				}
 			},
 			expectedStatus: http.StatusConflict,
@@ -140,8 +156,8 @@ func TestSupplierHandler_List(t *testing.T) {
 			mockSetup: func(m *MockSupplierRepoForHandler) {
 				m.ListFunc = func(ctx context.Context, searchQuery string) ([]models.Supplier, error) {
 					return []models.Supplier{
-						{ID: 1, TaxID: "111", CompanyName: "Supplier A", CreatedAt: now},
-						{ID: 2, TaxID: "222", CompanyName: "Supplier B", CreatedAt: now},
+						{ID: 1, TaxID: strPtr("111"), CompanyName: "Supplier A", CreatedAt: now},
+						{ID: 2, TaxID: strPtr("222"), CompanyName: "Supplier B", CreatedAt: now},
 					}, nil
 				}
 			},
@@ -191,7 +207,7 @@ func TestSupplierHandler_List(t *testing.T) {
 
 func TestSupplierHandler_Get(t *testing.T) {
 	logger := zap.NewNop()
-	sample := &models.Supplier{ID: 1, TaxID: "111", CompanyName: "Supplier A"}
+	sample := &models.Supplier{ID: 1, TaxID: strPtr("111"), CompanyName: "Supplier A"}
 
 	tests := []struct {
 		name           string
@@ -250,7 +266,7 @@ func TestSupplierHandler_Get(t *testing.T) {
 
 func TestSupplierHandler_Update(t *testing.T) {
 	logger := zap.NewNop()
-	existing := &models.Supplier{ID: 1, TaxID: "111", CompanyName: "Supplier A"}
+	existing := &models.Supplier{ID: 1, TaxID: strPtr("111"), CompanyName: "Supplier A", Phone: strPtr("+57 300 123")}
 
 	tests := []struct {
 		name           string
@@ -262,7 +278,7 @@ func TestSupplierHandler_Update(t *testing.T) {
 		{
 			name: "Success 200",
 			id:   "1",
-			body: `{"taxId": "111", "companyName": "Updated Supplier"}`,
+			body: `{"taxId": "111", "companyName": "Updated Supplier", "phone": "+57 300 123"}`,
 			mockSetup: func(m *MockSupplierRepoForHandler) {
 				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Supplier, error) {
 					return existing, nil
@@ -276,6 +292,13 @@ func TestSupplierHandler_Update(t *testing.T) {
 		{
 			name:           "Invalid ID 400",
 			id:             "0",
+			body:           `{"taxId": "111", "companyName": "Updated", "phone": "+57 300 123"}`,
+			mockSetup:      func(m *MockSupplierRepoForHandler) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Missing Phone 400",
+			id:             "1",
 			body:           `{"taxId": "111", "companyName": "Updated"}`,
 			mockSetup:      func(m *MockSupplierRepoForHandler) {},
 			expectedStatus: http.StatusBadRequest,
@@ -283,7 +306,7 @@ func TestSupplierHandler_Update(t *testing.T) {
 		{
 			name: "Not Found 404",
 			id:   "99",
-			body: `{"taxId": "111", "companyName": "Updated"}`,
+			body: `{"taxId": "111", "companyName": "Updated", "phone": "+57 300 123"}`,
 			mockSetup: func(m *MockSupplierRepoForHandler) {
 				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Supplier, error) {
 					return nil, sql.ErrNoRows
@@ -316,7 +339,7 @@ func TestSupplierHandler_Update(t *testing.T) {
 
 func TestSupplierHandler_Delete(t *testing.T) {
 	logger := zap.NewNop()
-	existing := &models.Supplier{ID: 1, TaxID: "111", CompanyName: "Supplier A"}
+	existing := &models.Supplier{ID: 1, TaxID: strPtr("111"), CompanyName: "Supplier A"}
 
 	tests := []struct {
 		name           string

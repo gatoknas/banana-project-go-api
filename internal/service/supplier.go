@@ -12,6 +12,7 @@ import (
 
 var (
 	ErrCompanyNameRequired  = errors.New("company_name is required")
+	ErrPhoneRequired        = errors.New("phone is required")
 	ErrTaxIDRequired        = errors.New("tax_id is required")
 	ErrTaxIDAlreadyExists   = errors.New("tax_id already registered")
 	ErrSupplierNotFound     = errors.New("supplier not found")
@@ -20,7 +21,7 @@ var (
 
 // SupplierRequest defines payload for creating or updating a supplier.
 type SupplierRequest struct {
-	TaxID       string  `json:"taxId"`
+	TaxID       *string `json:"taxId"`
 	CompanyName string  `json:"companyName"`
 	ContactName *string `json:"contactName"`
 	Phone       *string `json:"phone"`
@@ -38,23 +39,34 @@ func NewSupplierService(repo repository.SupplierRepository, db *sql.DB) *Supplie
 
 func (s *SupplierService) CreateSupplier(ctx context.Context, req SupplierRequest) (int64, error) {
 	req.CompanyName = strings.TrimSpace(req.CompanyName)
-	req.TaxID = strings.TrimSpace(req.TaxID)
-
 	if req.CompanyName == "" {
 		return 0, ErrCompanyNameRequired
 	}
-	if req.TaxID == "" {
-		return 0, ErrTaxIDRequired
+
+	if req.Phone == nil || strings.TrimSpace(*req.Phone) == "" {
+		return 0, ErrPhoneRequired
+	}
+	cleanedPhone := strings.TrimSpace(*req.Phone)
+	req.Phone = &cleanedPhone
+
+	var taxID *string
+	if req.TaxID != nil {
+		trimmed := strings.TrimSpace(*req.TaxID)
+		if trimmed != "" {
+			taxID = &trimmed
+		}
 	}
 
-	// Check tax_id uniqueness
-	existing, err := s.repo.GetByTaxID(ctx, req.TaxID)
-	if err == nil && existing != nil {
-		return 0, ErrTaxIDAlreadyExists
+	if taxID != nil {
+		// Check tax_id uniqueness
+		existing, err := s.repo.GetByTaxID(ctx, *taxID)
+		if err == nil && existing != nil {
+			return 0, ErrTaxIDAlreadyExists
+		}
 	}
 
 	supplier := &models.Supplier{
-		TaxID:       req.TaxID,
+		TaxID:       taxID,
 		CompanyName: req.CompanyName,
 		ContactName: req.ContactName,
 		Phone:       req.Phone,
@@ -81,14 +93,15 @@ func (s *SupplierService) GetSupplier(ctx context.Context, id int64) (*models.Su
 
 func (s *SupplierService) UpdateSupplier(ctx context.Context, id int64, req SupplierRequest) error {
 	req.CompanyName = strings.TrimSpace(req.CompanyName)
-	req.TaxID = strings.TrimSpace(req.TaxID)
-
 	if req.CompanyName == "" {
 		return ErrCompanyNameRequired
 	}
-	if req.TaxID == "" {
-		return ErrTaxIDRequired
+
+	if req.Phone == nil || strings.TrimSpace(*req.Phone) == "" {
+		return ErrPhoneRequired
 	}
+	cleanedPhone := strings.TrimSpace(*req.Phone)
+	req.Phone = &cleanedPhone
 
 	existing, err := s.repo.GetByID(ctx, id)
 	if err != nil {
@@ -98,17 +111,27 @@ func (s *SupplierService) UpdateSupplier(ctx context.Context, id int64, req Supp
 		return err
 	}
 
-	// If tax_id changed, verify it doesn't conflict with another supplier
-	if existing.TaxID != req.TaxID {
-		other, err := s.repo.GetByTaxID(ctx, req.TaxID)
-		if err == nil && other != nil && other.ID != id {
-			return ErrTaxIDAlreadyExists
+	var taxID *string
+	if req.TaxID != nil {
+		trimmed := strings.TrimSpace(*req.TaxID)
+		if trimmed != "" {
+			taxID = &trimmed
+		}
+	}
+
+	// If tax_id changed and is non-nil, verify it doesn't conflict with another supplier
+	if taxID != nil {
+		if existing.TaxID == nil || *existing.TaxID != *taxID {
+			other, err := s.repo.GetByTaxID(ctx, *taxID)
+			if err == nil && other != nil && other.ID != id {
+				return ErrTaxIDAlreadyExists
+			}
 		}
 	}
 
 	supplier := &models.Supplier{
 		ID:          id,
-		TaxID:       req.TaxID,
+		TaxID:       taxID,
 		CompanyName: req.CompanyName,
 		ContactName: req.ContactName,
 		Phone:       req.Phone,
