@@ -26,6 +26,7 @@ type SupplierRequest struct {
 	ContactName *string `json:"contactName"`
 	Phone       *string `json:"phone"`
 	Email       *string `json:"email"`
+	Description *string `json:"description"`
 }
 
 type SupplierService struct {
@@ -65,12 +66,21 @@ func (s *SupplierService) CreateSupplier(ctx context.Context, req SupplierReques
 		}
 	}
 
+	var description *string
+	if req.Description != nil {
+		trimmed := strings.TrimSpace(*req.Description)
+		if trimmed != "" {
+			description = &trimmed
+		}
+	}
+
 	supplier := &models.Supplier{
 		TaxID:       taxID,
 		CompanyName: req.CompanyName,
 		ContactName: req.ContactName,
 		Phone:       req.Phone,
 		Email:       req.Email,
+		Description: description,
 	}
 
 	return s.repo.Create(ctx, nil, supplier)
@@ -129,6 +139,14 @@ func (s *SupplierService) UpdateSupplier(ctx context.Context, id int64, req Supp
 		}
 	}
 
+	var description *string
+	if req.Description != nil {
+		trimmed := strings.TrimSpace(*req.Description)
+		if trimmed != "" {
+			description = &trimmed
+		}
+	}
+
 	supplier := &models.Supplier{
 		ID:          id,
 		TaxID:       taxID,
@@ -136,6 +154,7 @@ func (s *SupplierService) UpdateSupplier(ctx context.Context, id int64, req Supp
 		ContactName: req.ContactName,
 		Phone:       req.Phone,
 		Email:       req.Email,
+		Description: description,
 	}
 
 	return s.repo.Update(ctx, supplier)

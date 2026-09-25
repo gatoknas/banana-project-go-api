@@ -30,6 +30,8 @@ type Supplier struct {
 	Phone *string `json:"phone" db:"phone"`
 	// Email is the contact email address (Spanish: Correo Electrónico).
 	Email *string `json:"email" db:"email"`
+	// Description represents additional notes or details about the supplier (Spanish: Descripción / Notas).
+	Description *string `json:"description" db:"description"`
 	// CreatedAt is the timestamp when the supplier was registered (Spanish: Creado En).
 	CreatedAt time.Time `json:"createdAt" db:"created_at"`
 }

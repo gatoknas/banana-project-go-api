@@ -118,11 +118,12 @@ EXECUTE FUNCTION update_updated_at_column();
 -- suppliers (Spanish: proveedores)
 CREATE TABLE suppliers (
     id SERIAL PRIMARY KEY,
-    tax_id VARCHAR(20) NOT NULL UNIQUE, -- NIT/Cedula
+    tax_id VARCHAR(20) NULL UNIQUE, -- NIT/Cedula (optional)
     company_name VARCHAR(100) NOT NULL, -- Razon Social
     contact_name VARCHAR(100) NULL,
-    phone VARCHAR(20) NULL,
+    phone VARCHAR(20) NOT NULL,
     email VARCHAR(100) NULL,
+    description TEXT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 

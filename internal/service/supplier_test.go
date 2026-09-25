@@ -92,6 +92,23 @@ func TestCreateSupplier(t *testing.T) {
 			expectErr: nil,
 		},
 		{
+			name: "Success with description and phone",
+			req: service.SupplierRequest{
+				CompanyName: "Distribuidora Frutas SAS",
+				Phone:       strPtr("+57 300 123 4567"),
+				Description: strPtr("Proveedor de fruta de temporada"),
+			},
+			mockSetup: func(m *MockSupplierRepository) {
+				m.CreateFunc = func(ctx context.Context, tx *sql.Tx, s *models.Supplier) (int64, error) {
+					if s.Description == nil || *s.Description != "Proveedor de fruta de temporada" {
+						t.Errorf("expected description to be passed, got %v", s.Description)
+					}
+					return 1, nil
+				}
+			},
+			expectErr: nil,
+		},
+		{
 			name: "Missing company name",
 			req: service.SupplierRequest{
 				TaxID:       strPtr("900123456-1"),
@@ -315,6 +332,28 @@ func TestUpdateSupplier(t *testing.T) {
 					return existing, nil
 				}
 				m.UpdateFunc = func(ctx context.Context, s *models.Supplier) error {
+					return nil
+				}
+			},
+			expectErr: nil,
+		},
+		{
+			name: "Success update with description",
+			id:   1,
+			req: service.SupplierRequest{
+				TaxID:       strPtr("123"),
+				CompanyName: "Fruit Supplier New Name",
+				Phone:       strPtr("12345"),
+				Description: strPtr("Notas actualizadas del proveedor"),
+			},
+			mockSetup: func(m *MockSupplierRepository) {
+				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Supplier, error) {
+					return existing, nil
+				}
+				m.UpdateFunc = func(ctx context.Context, s *models.Supplier) error {
+					if s.Description == nil || *s.Description != "Notas actualizadas del proveedor" {
+						t.Errorf("expected description to be updated, got %v", s.Description)
+					}
 					return nil
 				}
 			},
