@@ -170,9 +170,70 @@ func (h *PurchaseHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Update handles PUT /api/v1/purchases/{id}
+// @Summary      Update an existing purchase order
+// @Description  Atomically reverts prior line stock and weighted average cost contributions, deletes previous items, updates header metadata, inserts new items, applies new inventory stock increments and recomputes weighted average cost (PMP). Requires the ayurami-admin or ayurami-salesperson role.
+// @Tags         purchases
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id        path      int                      true  "Purchase ID"
+// @Param        purchase  body      service.PurchaseRequest  true  "Updated Purchase Payload"
+// @Success      200       {object}  handlers.MessageResponse
+// @Failure      400       {string}  string "Bad request: invalid payload or validation error"
+// @Failure      404       {string}  string "Purchase not found"
+// @Failure      500       {string}  string "Internal server error"
+// @Router       /api/v1/purchases/{id} [put]
+func (h *PurchaseHandler) Update(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(w, "Bad request: invalid purchase ID", http.StatusBadRequest)
+		return
+	}
+
+	var req service.PurchaseRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("failed to decode purchase request", zap.Error(err))
+		http.Error(w, "Bad request: invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.service.UpdatePurchase(ctx, id, req); err != nil {
+		if errors.Is(err, service.ErrPurchaseNotFound) {
+			http.Error(w, "Not found: purchase not found", http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, service.ErrSupplierIDRequired) ||
+			errors.Is(err, service.ErrItemsRequired) ||
+			errors.Is(err, service.ErrInvalidProductID) ||
+			errors.Is(err, service.ErrInvalidQuantity) ||
+			errors.Is(err, service.ErrInvalidUnitCost) {
+			h.logger.Warn("purchase update validation failed", zap.Error(err))
+			http.Error(w, fmt.Sprintf("Bad request: %v", err), http.StatusBadRequest)
+			return
+		}
+		h.logger.Error("failed to update purchase", zap.Int64("id", id), zap.Error(err))
+		http.Error(w, fmt.Sprintf("Failed to update purchase: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(MessageResponse{
+		Status:  "success",
+		Message: "Purchase updated successfully",
+		ID:      id,
+	}); err != nil {
+		h.logger.Error("failed to encode purchase update response", zap.Error(err))
+	}
+}
+
 func parseDateQuery(s string) (time.Time, error) {
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
 		return t, nil
 	}
 	return time.Parse("2006-01-02", s)
 }
+

@@ -871,6 +871,49 @@ paths:
       summary: Get purchase order details
       tags:
       - purchases
+    put:
+      consumes:
+      - application/json
+      description: Atomically reverts prior line stock and weighted average cost contributions,
+        deletes previous items, updates header metadata, inserts new items, applies
+        new inventory stock increments and recomputes weighted average cost (PMP).
+        Requires the ayurami-admin or ayurami-salesperson role.
+      parameters:
+      - description: Purchase ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated Purchase Payload
+        in: body
+        name: purchase
+        required: true
+        schema:
+          $ref: '#/definitions/service.PurchaseRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.MessageResponse'
+        "400":
+          description: 'Bad request: invalid payload or validation error'
+          schema:
+            type: string
+        "404":
+          description: Purchase not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Update an existing purchase order
+      tags:
+      - purchases
   /api/v1/sales:
     post:
       consumes:
