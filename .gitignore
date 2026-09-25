@@ -24,8 +24,11 @@ profile.cov
 go.work
 go.work.sum
 
-# env file
+# env and credentials
 .env
+service-account*.json
+*.pem
+*.key
 
 # Editor/IDE
 # .idea/

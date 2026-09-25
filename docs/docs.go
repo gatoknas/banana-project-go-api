@@ -675,6 +675,79 @@ const docTemplate = `{
             }
         },
         "/api/v1/sales": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves a paginated list of sales with optional filtering by date range, payment method, and cashier. Requires the ayurami-admin or ayurami-salesperson role.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sales"
+                ],
+                "summary": "List sales transactions",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 10, max 100)",
+                        "name": "pageSize",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date filter (YYYY-MM-DD or RFC3339)",
+                        "name": "fromDate",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date filter (YYYY-MM-DD or RFC3339)",
+                        "name": "toDate",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by payment method (e.g. Cash, Card)",
+                        "name": "paymentMethod",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by cashier user ID",
+                        "name": "userId",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.PaginatedSalesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request: invalid filter parameters",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -712,6 +785,58 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad request: invalid JSON payload or sale must have at least one item",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sales/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves full sale ticket details including itemized products and prices. Requires the ayurami-admin or ayurami-salesperson role.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sales"
+                ],
+                "summary": "Get sale details by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Sale ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Sale"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request: invalid sale ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Sale not found",
                         "schema": {
                             "type": "string"
                         }
@@ -1629,6 +1754,23 @@ const docTemplate = `{
                 }
             }
         },
+        "models.PaginatedSalesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Sale"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/models.SalePagination"
+                },
+                "summary": {
+                    "$ref": "#/definitions/models.SaleSummaryStats"
+                }
+            }
+        },
         "models.Product": {
             "type": "object",
             "properties": {
@@ -1820,6 +1962,111 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "transactionCount": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.Sale": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "description": "CreatedAt is the creation timestamp (Spanish: Creado En).",
+                    "type": "string"
+                },
+                "details": {
+                    "description": "Details is the list of line items in this sale (Spanish: Detalles de Venta).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.SaleDetail"
+                    }
+                },
+                "id": {
+                    "description": "ID is the unique identifier (Spanish: ID).",
+                    "type": "integer"
+                },
+                "itemsCount": {
+                    "description": "ItemsCount is the total number of distinct line items in the sale (Spanish: Cantidad de Ítems).",
+                    "type": "integer"
+                },
+                "paymentMethod": {
+                    "description": "PaymentMethod is the checkout method (e.g. Cash, Card) (Spanish: Método de Pago).",
+                    "type": "string"
+                },
+                "saleDate": {
+                    "description": "SaleDate is when the checkout occurred (Spanish: Fecha de Venta).",
+                    "type": "string"
+                },
+                "totalAmount": {
+                    "description": "TotalAmount is the final total net amount received (Spanish: Total de la Venta).",
+                    "type": "number"
+                },
+                "userId": {
+                    "description": "UserID is the reference ID of the cashier who sold it (Spanish: ID Usuario).",
+                    "type": "integer"
+                },
+                "userName": {
+                    "description": "UserName is the name of the cashier / user who registered the sale (Spanish: Nombre Usuario).",
+                    "type": "string"
+                }
+            }
+        },
+        "models.SaleDetail": {
+            "type": "object",
+            "properties": {
+                "historicalUnitPrice": {
+                    "description": "HistoricalUnitPrice is the unit price at the time of sale (Spanish: Precio Unitario Histórico).",
+                    "type": "number"
+                },
+                "id": {
+                    "description": "ID is the unique identifier (Spanish: ID).",
+                    "type": "integer"
+                },
+                "productId": {
+                    "description": "ProductID is the principal sold product ID (Spanish: ID Producto).",
+                    "type": "integer"
+                },
+                "productName": {
+                    "description": "ProductName is the name of the sold product (Spanish: Nombre Producto).",
+                    "type": "string"
+                },
+                "quantity": {
+                    "description": "Quantity is the amount sold, supports decimals for weighed items (Spanish: Cantidad).",
+                    "type": "number"
+                },
+                "saleId": {
+                    "description": "SaleID is the parent sale header ID (Spanish: ID Venta).",
+                    "type": "integer"
+                },
+                "subtotal": {
+                    "description": "Subtotal is quantity * HistoricalUnitPrice (Spanish: Subtotal).",
+                    "type": "number"
+                }
+            }
+        },
+        "models.SalePagination": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "type": "integer"
+                },
+                "totalItems": {
+                    "type": "integer"
+                },
+                "totalPages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.SaleSummaryStats": {
+            "type": "object",
+            "properties": {
+                "totalAmount": {
+                    "type": "number"
+                },
+                "totalCount": {
                     "type": "integer"
                 }
             }

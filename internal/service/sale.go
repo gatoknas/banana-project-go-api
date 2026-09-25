@@ -110,3 +110,25 @@ func (s *SaleService) CreateSale(ctx context.Context, req SaleRequest) (int64, e
 
 	return saleID, nil
 }
+
+// ListSales fetches paginated sales along with metadata and metrics based on filters.
+func (s *SaleService) ListSales(ctx context.Context, filter models.SaleFilter) (models.PaginatedSalesResponse, error) {
+	sales, pagination, summary, err := s.repo.ListSales(ctx, filter)
+	if err != nil {
+		return models.PaginatedSalesResponse{}, err
+	}
+	return models.PaginatedSalesResponse{
+		Data:       sales,
+		Pagination: pagination,
+		Summary:    summary,
+	}, nil
+}
+
+// GetSaleByID retrieves a single sale transaction with its itemized breakdown.
+func (s *SaleService) GetSaleByID(ctx context.Context, id int64) (*models.Sale, error) {
+	if id <= 0 {
+		return nil, errors.New("invalid sale ID")
+	}
+	return s.repo.GetSaleByID(ctx, id)
+}
+
