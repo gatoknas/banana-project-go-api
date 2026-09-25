@@ -21,7 +21,7 @@ type Supplier struct {
 	// ID is the unique identifier (Spanish: ID).
 	ID int64 `json:"id" db:"id"`
 	// TaxID is the tax identifier (e.g. NIT/Cédula) (Spanish: NIT o Cédula).
-	TaxID string `json:"taxId" db:"tax_id"`
+	TaxID *string `json:"taxId" db:"tax_id"`
 	// CompanyName is the legal name of the business (Spanish: Razón Social).
 	CompanyName string `json:"companyName" db:"company_name"`
 	// ContactName is the provider contact representative (Spanish: Nombre de Contacto).

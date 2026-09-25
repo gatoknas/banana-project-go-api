@@ -11,6 +11,10 @@ import (
 	"org.banana.project/api/internal/service"
 )
 
+func strPtr(s string) *string {
+	return &s
+}
+
 type MockSupplierRepository struct {
 	CreateFunc       func(ctx context.Context, tx *sql.Tx, s *models.Supplier) (int64, error)
 	GetByIDFunc      func(ctx context.Context, id int64) (*models.Supplier, error)
@@ -57,10 +61,11 @@ func TestCreateSupplier(t *testing.T) {
 		expectErr error
 	}{
 		{
-			name: "Success",
+			name: "Success with tax ID and phone",
 			req: service.SupplierRequest{
-				TaxID:       "900123456-1",
+				TaxID:       strPtr("900123456-1"),
 				CompanyName: "Distribuidora Frutas SAS",
+				Phone:       strPtr("+57 300 123 4567"),
 			},
 			mockSetup: func(m *MockSupplierRepository) {
 				m.GetByTaxIDFunc = func(ctx context.Context, taxID string) (*models.Supplier, error) {
@@ -73,32 +78,59 @@ func TestCreateSupplier(t *testing.T) {
 			expectErr: nil,
 		},
 		{
+			name: "Success with only name and phone (tax ID omitted)",
+			req: service.SupplierRequest{
+				TaxID:       nil,
+				CompanyName: "Distribuidora Frutas SAS",
+				Phone:       strPtr("+57 300 123 4567"),
+			},
+			mockSetup: func(m *MockSupplierRepository) {
+				m.CreateFunc = func(ctx context.Context, tx *sql.Tx, s *models.Supplier) (int64, error) {
+					return 1, nil
+				}
+			},
+			expectErr: nil,
+		},
+		{
 			name: "Missing company name",
 			req: service.SupplierRequest{
-				TaxID:       "900123456-1",
+				TaxID:       strPtr("900123456-1"),
 				CompanyName: "",
+				Phone:       strPtr("+57 300 123 4567"),
 			},
 			mockSetup: func(m *MockSupplierRepository) {},
 			expectErr: service.ErrCompanyNameRequired,
 		},
 		{
-			name: "Missing tax ID",
+			name: "Missing phone",
 			req: service.SupplierRequest{
-				TaxID:       "",
+				TaxID:       strPtr("900123456-1"),
 				CompanyName: "Distribuidora Frutas SAS",
+				Phone:       nil,
 			},
 			mockSetup: func(m *MockSupplierRepository) {},
-			expectErr: service.ErrTaxIDRequired,
+			expectErr: service.ErrPhoneRequired,
+		},
+		{
+			name: "Empty phone string",
+			req: service.SupplierRequest{
+				TaxID:       strPtr("900123456-1"),
+				CompanyName: "Distribuidora Frutas SAS",
+				Phone:       strPtr("   "),
+			},
+			mockSetup: func(m *MockSupplierRepository) {},
+			expectErr: service.ErrPhoneRequired,
 		},
 		{
 			name: "Tax ID already exists",
 			req: service.SupplierRequest{
-				TaxID:       "900123456-1",
+				TaxID:       strPtr("900123456-1"),
 				CompanyName: "Distribuidora Frutas SAS",
+				Phone:       strPtr("+57 300 123 4567"),
 			},
 			mockSetup: func(m *MockSupplierRepository) {
 				m.GetByTaxIDFunc = func(ctx context.Context, taxID string) (*models.Supplier, error) {
-					return &models.Supplier{ID: 2, TaxID: "900123456-1"}, nil
+					return &models.Supplier{ID: 2, TaxID: strPtr("900123456-1")}, nil
 				}
 			},
 			expectErr: service.ErrTaxIDAlreadyExists,
@@ -132,8 +164,8 @@ func TestCreateSupplier(t *testing.T) {
 func TestListSuppliers(t *testing.T) {
 	now := time.Now()
 	sampleSuppliers := []models.Supplier{
-		{ID: 1, TaxID: "123", CompanyName: "Fruit Supplier", CreatedAt: now},
-		{ID: 2, TaxID: "456", CompanyName: "Dairy Supplier", CreatedAt: now},
+		{ID: 1, TaxID: strPtr("123"), CompanyName: "Fruit Supplier", CreatedAt: now},
+		{ID: 2, TaxID: strPtr("456"), CompanyName: "Dairy Supplier", CreatedAt: now},
 	}
 
 	tests := []struct {
@@ -141,10 +173,10 @@ func TestListSuppliers(t *testing.T) {
 		search      string
 		mockSetup   func(m *MockSupplierRepository)
 		expectedLen int
-		expectErr   bool
+		expectErr   error
 	}{
 		{
-			name:   "Success list",
+			name:   "Success list all",
 			search: "",
 			mockSetup: func(m *MockSupplierRepository) {
 				m.ListFunc = func(ctx context.Context, searchQuery string) ([]models.Supplier, error) {
@@ -152,18 +184,29 @@ func TestListSuppliers(t *testing.T) {
 				}
 			},
 			expectedLen: 2,
-			expectErr:   false,
+			expectErr:   nil,
 		},
 		{
-			name:   "Repo error",
-			search: "fruit",
+			name:   "Search returns filtered",
+			search: "Fruit",
 			mockSetup: func(m *MockSupplierRepository) {
 				m.ListFunc = func(ctx context.Context, searchQuery string) ([]models.Supplier, error) {
-					return nil, errors.New("db error")
+					return []models.Supplier{sampleSuppliers[0]}, nil
+				}
+			},
+			expectedLen: 1,
+			expectErr:   nil,
+		},
+		{
+			name:   "Database error",
+			search: "",
+			mockSetup: func(m *MockSupplierRepository) {
+				m.ListFunc = func(ctx context.Context, searchQuery string) ([]models.Supplier, error) {
+					return nil, errors.New("connection failed")
 				}
 			},
 			expectedLen: 0,
-			expectErr:   true,
+			expectErr:   errors.New("connection failed"),
 		},
 	}
 
@@ -175,18 +218,24 @@ func TestListSuppliers(t *testing.T) {
 			svc := service.NewSupplierService(mock, nil)
 			list, err := svc.ListSuppliers(context.Background(), tt.search)
 
-			if (err != nil) != tt.expectErr {
-				t.Fatalf("expected error: %v, got %v", tt.expectErr, err)
-			}
-			if !tt.expectErr && len(list) != tt.expectedLen {
-				t.Errorf("expected %d suppliers, got %d", tt.expectedLen, len(list))
+			if tt.expectErr != nil {
+				if err == nil {
+					t.Fatalf("expected error %v, got nil", tt.expectErr)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if len(list) != tt.expectedLen {
+					t.Errorf("expected %d suppliers, got %d", tt.expectedLen, len(list))
+				}
 			}
 		})
 	}
 }
 
 func TestGetSupplier(t *testing.T) {
-	sample := &models.Supplier{ID: 1, TaxID: "123", CompanyName: "Fruit Supplier"}
+	sample := &models.Supplier{ID: 1, TaxID: strPtr("123"), CompanyName: "Fruit Supplier"}
 
 	tests := []struct {
 		name      string
@@ -196,7 +245,7 @@ func TestGetSupplier(t *testing.T) {
 		expectErr error
 	}{
 		{
-			name: "Success found",
+			name: "Success",
 			id:   1,
 			mockSetup: func(m *MockSupplierRepository) {
 				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Supplier, error) {
@@ -244,7 +293,7 @@ func TestGetSupplier(t *testing.T) {
 }
 
 func TestUpdateSupplier(t *testing.T) {
-	existing := &models.Supplier{ID: 1, TaxID: "123", CompanyName: "Fruit Supplier"}
+	existing := &models.Supplier{ID: 1, TaxID: strPtr("123"), CompanyName: "Fruit Supplier", Phone: strPtr("12345")}
 
 	tests := []struct {
 		name      string
@@ -257,8 +306,9 @@ func TestUpdateSupplier(t *testing.T) {
 			name: "Success update",
 			id:   1,
 			req: service.SupplierRequest{
-				TaxID:       "123",
+				TaxID:       strPtr("123"),
 				CompanyName: "Fruit Supplier New Name",
+				Phone:       strPtr("12345"),
 			},
 			mockSetup: func(m *MockSupplierRepository) {
 				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Supplier, error) {
@@ -271,18 +321,30 @@ func TestUpdateSupplier(t *testing.T) {
 			expectErr: nil,
 		},
 		{
+			name: "Missing phone",
+			id:   1,
+			req: service.SupplierRequest{
+				TaxID:       strPtr("123"),
+				CompanyName: "Fruit Supplier",
+				Phone:       nil,
+			},
+			mockSetup: func(m *MockSupplierRepository) {},
+			expectErr: service.ErrPhoneRequired,
+		},
+		{
 			name: "Tax ID conflict with another supplier",
 			id:   1,
 			req: service.SupplierRequest{
-				TaxID:       "456",
+				TaxID:       strPtr("456"),
 				CompanyName: "Fruit Supplier",
+				Phone:       strPtr("12345"),
 			},
 			mockSetup: func(m *MockSupplierRepository) {
 				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Supplier, error) {
 					return existing, nil
 				}
 				m.GetByTaxIDFunc = func(ctx context.Context, taxID string) (*models.Supplier, error) {
-					return &models.Supplier{ID: 2, TaxID: "456"}, nil
+					return &models.Supplier{ID: 2, TaxID: strPtr("456")}, nil
 				}
 			},
 			expectErr: service.ErrTaxIDAlreadyExists,
@@ -291,8 +353,9 @@ func TestUpdateSupplier(t *testing.T) {
 			name: "Supplier not found",
 			id:   99,
 			req: service.SupplierRequest{
-				TaxID:       "123",
+				TaxID:       strPtr("123"),
 				CompanyName: "Name",
+				Phone:       strPtr("12345"),
 			},
 			mockSetup: func(m *MockSupplierRepository) {
 				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Supplier, error) {
@@ -323,7 +386,7 @@ func TestUpdateSupplier(t *testing.T) {
 }
 
 func TestDeleteSupplier(t *testing.T) {
-	existing := &models.Supplier{ID: 1, TaxID: "123", CompanyName: "Fruit Supplier"}
+	existing := &models.Supplier{ID: 1, TaxID: strPtr("123"), CompanyName: "Fruit Supplier"}
 
 	tests := []struct {
 		name      string
