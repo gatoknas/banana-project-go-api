@@ -1839,6 +1839,10 @@ const docTemplate = `{
                     "description": "CreatedAt is the timestamp when the supplier was registered (Spanish: Creado En).",
                     "type": "string"
                 },
+                "description": {
+                    "description": "Description represents additional notes or details about the supplier (Spanish: Descripción / Notas).",
+                    "type": "string"
+                },
                 "email": {
                     "description": "Email is the contact email address (Spanish: Correo Electrónico).",
                     "type": "string"
@@ -2028,6 +2032,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "contactName": {
+                    "type": "string"
+                },
+                "description": {
                     "type": "string"
                 },
                 "email": {

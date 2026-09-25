@@ -92,6 +92,22 @@ func TestSupplierHandler_Create(t *testing.T) {
 			expectedStatus: http.StatusCreated,
 		},
 		{
+			name: "Success 201 Created with Description",
+			body: `{"taxId": "900123", "companyName": "Fruit Express", "phone": "+57 300 123", "description": "Preferred fruit distributor in Medellín"}`,
+			mockSetup: func(m *MockSupplierRepoForHandler) {
+				m.GetByTaxIDFunc = func(ctx context.Context, taxID string) (*models.Supplier, error) {
+					return nil, sql.ErrNoRows
+				}
+				m.CreateFunc = func(ctx context.Context, tx *sql.Tx, s *models.Supplier) (int64, error) {
+					if s.Description == nil || *s.Description != "Preferred fruit distributor in Medellín" {
+						t.Errorf("expected description to be passed, got %v", s.Description)
+					}
+					return 10, nil
+				}
+			},
+			expectedStatus: http.StatusCreated,
+		},
+		{
 			name:           "Invalid JSON payload 400",
 			body:           `{invalid-json}`,
 			mockSetup:      func(m *MockSupplierRepoForHandler) {},
@@ -284,6 +300,23 @@ func TestSupplierHandler_Update(t *testing.T) {
 					return existing, nil
 				}
 				m.UpdateFunc = func(ctx context.Context, s *models.Supplier) error {
+					return nil
+				}
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name: "Success 200 with Description",
+			id:   "1",
+			body: `{"taxId": "111", "companyName": "Updated Supplier", "phone": "+57 300 123", "description": "Updated vendor notes"}`,
+			mockSetup: func(m *MockSupplierRepoForHandler) {
+				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Supplier, error) {
+					return existing, nil
+				}
+				m.UpdateFunc = func(ctx context.Context, s *models.Supplier) error {
+					if s.Description == nil || *s.Description != "Updated vendor notes" {
+						t.Errorf("expected description to be passed, got %v", s.Description)
+					}
 					return nil
 				}
 			},
