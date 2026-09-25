@@ -19,6 +19,9 @@ type PurchaseRepository interface {
 	ListPurchases(ctx context.Context, supplierID *int64, fromDate, toDate *time.Time) ([]models.Purchase, error)
 	GetPurchaseByID(ctx context.Context, id int64) (*models.Purchase, error)
 	GetPurchaseDetails(ctx context.Context, purchaseID int64) ([]models.PurchaseDetail, error)
+	UpdatePurchase(ctx context.Context, tx *sql.Tx, p *models.Purchase) error
+	DeletePurchaseDetails(ctx context.Context, tx *sql.Tx, purchaseID int64) error
+	DeductStock(ctx context.Context, tx *sql.Tx, productID int64, quantity float64) error
 }
 
 // SQLPurchaseRepository implements PurchaseRepository using PostgreSQL.
@@ -226,3 +229,45 @@ func (r *SQLPurchaseRepository) GetPurchaseDetails(ctx context.Context, purchase
 
 	return details, nil
 }
+
+// UpdatePurchase updates the purchase header.
+func (r *SQLPurchaseRepository) UpdatePurchase(ctx context.Context, tx *sql.Tx, p *models.Purchase) error {
+	query := `UPDATE purchases 
+	          SET supplier_id = $1, purchase_date = $2, invoice_number = $3, total_amount = $4, notes = $5 
+	          WHERE id = $6`
+	var err error
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, query, p.SupplierID, p.PurchaseDate, p.InvoiceNumber, p.TotalAmount, p.Notes, p.ID)
+	} else {
+		_, err = r.db.ExecContext(ctx, query, p.SupplierID, p.PurchaseDate, p.InvoiceNumber, p.TotalAmount, p.Notes, p.ID)
+	}
+	return err
+}
+
+// DeletePurchaseDetails deletes all detail line items for a given purchase ID.
+func (r *SQLPurchaseRepository) DeletePurchaseDetails(ctx context.Context, tx *sql.Tx, purchaseID int64) error {
+	query := `DELETE FROM purchase_details WHERE purchase_id = $1`
+	var err error
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, query, purchaseID)
+	} else {
+		_, err = r.db.ExecContext(ctx, query, purchaseID)
+	}
+	return err
+}
+
+// DeductStock decreases the inventory stock by the given quantity.
+func (r *SQLPurchaseRepository) DeductStock(ctx context.Context, tx *sql.Tx, productID int64, quantity float64) error {
+	query := `UPDATE inventories 
+	          SET current_stock = current_stock - $1, 
+	              updated_at = CURRENT_TIMESTAMP 
+	          WHERE product_id = $2`
+	var err error
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, query, quantity, productID)
+	} else {
+		_, err = r.db.ExecContext(ctx, query, quantity, productID)
+	}
+	return err
+}
+

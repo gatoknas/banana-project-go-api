@@ -27,6 +27,9 @@ type MockPurchaseRepoForHandler struct {
 	ListPurchasesFunc            func(ctx context.Context, supplierID *int64, fromDate, toDate *time.Time) ([]models.Purchase, error)
 	GetPurchaseByIDFunc          func(ctx context.Context, id int64) (*models.Purchase, error)
 	GetPurchaseDetailsFunc       func(ctx context.Context, purchaseID int64) ([]models.PurchaseDetail, error)
+	UpdatePurchaseFunc           func(ctx context.Context, tx *sql.Tx, p *models.Purchase) error
+	DeletePurchaseDetailsFunc    func(ctx context.Context, tx *sql.Tx, purchaseID int64) error
+	DeductStockFunc              func(ctx context.Context, tx *sql.Tx, productID int64, quantity float64) error
 }
 
 func (m *MockPurchaseRepoForHandler) CreatePurchase(ctx context.Context, tx *sql.Tx, p *models.Purchase) (int64, error) {
@@ -59,6 +62,27 @@ func (m *MockPurchaseRepoForHandler) GetPurchaseByID(ctx context.Context, id int
 
 func (m *MockPurchaseRepoForHandler) GetPurchaseDetails(ctx context.Context, purchaseID int64) ([]models.PurchaseDetail, error) {
 	return m.GetPurchaseDetailsFunc(ctx, purchaseID)
+}
+
+func (m *MockPurchaseRepoForHandler) UpdatePurchase(ctx context.Context, tx *sql.Tx, p *models.Purchase) error {
+	if m.UpdatePurchaseFunc != nil {
+		return m.UpdatePurchaseFunc(ctx, tx, p)
+	}
+	return nil
+}
+
+func (m *MockPurchaseRepoForHandler) DeletePurchaseDetails(ctx context.Context, tx *sql.Tx, purchaseID int64) error {
+	if m.DeletePurchaseDetailsFunc != nil {
+		return m.DeletePurchaseDetailsFunc(ctx, tx, purchaseID)
+	}
+	return nil
+}
+
+func (m *MockPurchaseRepoForHandler) DeductStock(ctx context.Context, tx *sql.Tx, productID int64, quantity float64) error {
+	if m.DeductStockFunc != nil {
+		return m.DeductStockFunc(ctx, tx, productID, quantity)
+	}
+	return nil
 }
 
 func TestPurchaseHandler_Create(t *testing.T) {
@@ -300,3 +324,122 @@ func TestPurchaseHandler_Get(t *testing.T) {
 		})
 	}
 }
+
+func TestPurchaseHandler_Update(t *testing.T) {
+	logger := zap.NewNop()
+	sample := &models.Purchase{ID: 1, SupplierID: 1, TotalAmount: 5000}
+
+	tests := []struct {
+		name           string
+		id             string
+		body           string
+		mockSetup      func(m *MockPurchaseRepoForHandler, mock sqlmock.Sqlmock)
+		expectedStatus int
+	}{
+		{
+			name: "Success 200 OK",
+			id:   "1",
+			body: `{"supplierId": 1, "items": [{"productId": 1, "quantityPurchased": 10, "unitCost": 500}]}`,
+			mockSetup: func(m *MockPurchaseRepoForHandler, mock sqlmock.Sqlmock) {
+				m.GetPurchaseByIDFunc = func(ctx context.Context, id int64) (*models.Purchase, error) {
+					return sample, nil
+				}
+				m.GetPurchaseDetailsFunc = func(ctx context.Context, purchaseID int64) ([]models.PurchaseDetail, error) {
+					return []models.PurchaseDetail{}, nil
+				}
+				mock.ExpectBegin()
+				m.DeletePurchaseDetailsFunc = func(ctx context.Context, tx *sql.Tx, purchaseID int64) error {
+					return nil
+				}
+				m.UpdatePurchaseFunc = func(ctx context.Context, tx *sql.Tx, p *models.Purchase) error {
+					return nil
+				}
+				m.CreatePurchaseDetailFunc = func(ctx context.Context, tx *sql.Tx, pd *models.PurchaseDetail) (int64, error) {
+					return 1, nil
+				}
+				m.GetProductStockAndCostFunc = func(ctx context.Context, tx *sql.Tx, productID int64) (float64, float64, error) {
+					return 0, 0, nil
+				}
+				m.UpdateProductAverageCostFunc = func(ctx context.Context, tx *sql.Tx, productID int64, newCost float64) error {
+					return nil
+				}
+				m.AddStockFunc = func(ctx context.Context, tx *sql.Tx, productID int64, qty float64) error {
+					return nil
+				}
+				mock.ExpectCommit()
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Invalid ID 400",
+			id:             "xyz",
+			body:           `{"supplierId": 1, "items": [{"productId": 1, "quantityPurchased": 10, "unitCost": 500}]}`,
+			mockSetup:      func(m *MockPurchaseRepoForHandler, mock sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Invalid JSON payload 400",
+			id:             "1",
+			body:           `{invalid-json`,
+			mockSetup:      func(m *MockPurchaseRepoForHandler, mock sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Validation error empty items 400",
+			id:             "1",
+			body:           `{"supplierId": 1, "items": []}`,
+			mockSetup:      func(m *MockPurchaseRepoForHandler, mock sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "Purchase not found 404",
+			id:   "999",
+			body: `{"supplierId": 1, "items": [{"productId": 1, "quantityPurchased": 10, "unitCost": 500}]}`,
+			mockSetup: func(m *MockPurchaseRepoForHandler, mock sqlmock.Sqlmock) {
+				m.GetPurchaseByIDFunc = func(ctx context.Context, id int64) (*models.Purchase, error) {
+					return nil, sql.ErrNoRows
+				}
+			},
+			expectedStatus: http.StatusNotFound,
+		},
+		{
+			name: "Internal server error 500",
+			id:   "1",
+			body: `{"supplierId": 1, "items": [{"productId": 1, "quantityPurchased": 10, "unitCost": 500}]}`,
+			mockSetup: func(m *MockPurchaseRepoForHandler, mock sqlmock.Sqlmock) {
+				m.GetPurchaseByIDFunc = func(ctx context.Context, id int64) (*models.Purchase, error) {
+					return nil, errors.New("db disk failure")
+				}
+			},
+			expectedStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mockSQL, err := sqlmock.New()
+			if err != nil {
+				t.Fatalf("failed to create sqlmock: %v", err)
+			}
+			defer db.Close()
+
+			mock := &MockPurchaseRepoForHandler{}
+			tt.mockSetup(mock, mockSQL)
+
+			svc := service.NewPurchaseService(mock, db)
+			handler := handlers.NewPurchaseHandler(svc, logger)
+
+			req := httptest.NewRequest(http.MethodPut, "/api/v1/purchases/"+tt.id, bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			req.SetPathValue("id", tt.id)
+			w := httptest.NewRecorder()
+
+			handler.Update(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Fatalf("expected status %d, got %d", tt.expectedStatus, w.Code)
+			}
+		})
+	}
+}
+

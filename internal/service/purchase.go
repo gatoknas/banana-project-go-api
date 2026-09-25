@@ -177,3 +177,169 @@ func (s *PurchaseService) GetPurchase(ctx context.Context, id int64) (*models.Pu
 
 	return purchase, nil
 }
+
+// UpdatePurchase updates an existing purchase order, atomically reverting previous line items and stock/cost contributions, deleting old details, updating the header, inserting new details, and applying new stock and weighted average costs.
+func (s *PurchaseService) UpdatePurchase(ctx context.Context, id int64, req PurchaseRequest) error {
+	if id <= 0 {
+		return ErrPurchaseNotFound
+	}
+	if req.SupplierID <= 0 {
+		return ErrSupplierIDRequired
+	}
+	if len(req.Items) == 0 {
+		return ErrItemsRequired
+	}
+
+	for _, item := range req.Items {
+		if item.ProductID <= 0 {
+			return ErrInvalidProductID
+		}
+		if item.QuantityPurchased <= 0 {
+			return ErrInvalidQuantity
+		}
+		if item.UnitCost < 0 {
+			return ErrInvalidUnitCost
+		}
+	}
+
+	existing, err := s.repo.GetPurchaseByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrPurchaseNotFound
+		}
+		return fmt.Errorf("failed to retrieve existing purchase: %w", err)
+	}
+
+	oldDetails, err := s.repo.GetPurchaseDetails(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve old purchase details: %w", err)
+	}
+
+	var newTotalAmount float64
+	for _, item := range req.Items {
+		newTotalAmount += item.QuantityPurchased * item.UnitCost
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Revert previous purchase detail stock and cost contributions
+	for _, oldItem := range oldDetails {
+		convFactor := oldItem.ConversionFactor
+		if convFactor <= 0 {
+			convFactor = 1.0
+		}
+		oldBaseQty := oldItem.QuantityPurchased * convFactor
+		oldBaseUnitCost := oldItem.UnitCost / convFactor
+		oldPurchaseValue := oldBaseQty * oldBaseUnitCost
+
+		currentStock, currentAvgCost, err := s.repo.GetProductStockAndCost(ctx, tx, oldItem.ProductID)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve stock/cost for product %d: %w", oldItem.ProductID, err)
+		}
+
+		revertedStock := currentStock - oldBaseQty
+		revertedValue := (currentStock * currentAvgCost) - oldPurchaseValue
+		var revertedAvgCost float64
+		if revertedStock > 0 && revertedValue > 0 {
+			revertedAvgCost = revertedValue / revertedStock
+		} else if revertedStock > 0 {
+			revertedAvgCost = currentAvgCost
+		} else {
+			revertedAvgCost = 0
+		}
+
+		if err := s.repo.UpdateProductAverageCost(ctx, tx, oldItem.ProductID, revertedAvgCost); err != nil {
+			return fmt.Errorf("failed to revert average cost for product %d: %w", oldItem.ProductID, err)
+		}
+
+		if err := s.repo.DeductStock(ctx, tx, oldItem.ProductID, oldBaseQty); err != nil {
+			return fmt.Errorf("failed to deduct stock for product %d: %w", oldItem.ProductID, err)
+		}
+	}
+
+	// 2. Remove old purchase details
+	if err := s.repo.DeletePurchaseDetails(ctx, tx, id); err != nil {
+		return fmt.Errorf("failed to delete old purchase details: %w", err)
+	}
+
+	// 3. Update purchase header
+	purchaseDate := existing.PurchaseDate
+	if req.PurchaseDate != nil {
+		purchaseDate = *req.PurchaseDate
+	}
+
+	p := &models.Purchase{
+		ID:            id,
+		SupplierID:    req.SupplierID,
+		PurchaseDate:  purchaseDate,
+		InvoiceNumber: req.InvoiceNumber,
+		TotalAmount:   newTotalAmount,
+		Notes:         req.Notes,
+	}
+
+	if err := s.repo.UpdatePurchase(ctx, tx, p); err != nil {
+		return fmt.Errorf("failed to update purchase header: %w", err)
+	}
+
+	// 4. Insert new purchase details, increment stock, and recompute weighted average cost
+	for _, item := range req.Items {
+		convFactor := item.ConversionFactor
+		if convFactor <= 0 {
+			convFactor = 1.0
+		}
+
+		pd := &models.PurchaseDetail{
+			PurchaseID:        id,
+			ProductID:         item.ProductID,
+			PurchaseUnitID:    item.PurchaseUnitID,
+			QuantityPurchased: item.QuantityPurchased,
+			UnitCost:          item.UnitCost,
+			ConversionFactor:  convFactor,
+		}
+
+		if _, err := s.repo.CreatePurchaseDetail(ctx, tx, pd); err != nil {
+			return fmt.Errorf("failed to insert purchase detail for product %d: %w", item.ProductID, err)
+		}
+
+		currentStock, currentAvgCost, err := s.repo.GetProductStockAndCost(ctx, tx, item.ProductID)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve product stock and cost for product %d: %w", item.ProductID, err)
+		}
+
+		baseQty := item.QuantityPurchased * convFactor
+		baseUnitCost := item.UnitCost / convFactor
+
+		var newAvgCost float64
+		if currentStock <= 0 {
+			newAvgCost = baseUnitCost
+		} else {
+			totalPrevValue := currentStock * currentAvgCost
+			newPurchaseValue := baseQty * baseUnitCost
+			newTotalStock := currentStock + baseQty
+			if newTotalStock > 0 {
+				newAvgCost = (totalPrevValue + newPurchaseValue) / newTotalStock
+			} else {
+				newAvgCost = baseUnitCost
+			}
+		}
+
+		if err := s.repo.UpdateProductAverageCost(ctx, tx, item.ProductID, newAvgCost); err != nil {
+			return fmt.Errorf("failed to update average cost for product %d: %w", item.ProductID, err)
+		}
+
+		if err := s.repo.AddStock(ctx, tx, item.ProductID, baseQty); err != nil {
+			return fmt.Errorf("failed to increment stock for product %d: %w", item.ProductID, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit purchase update transaction: %w", err)
+	}
+
+	return nil
+}
+

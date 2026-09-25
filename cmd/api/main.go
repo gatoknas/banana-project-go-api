@@ -231,6 +231,7 @@ func setupRouter(logger *zap.Logger) http.Handler {
 	protectedMux.Handle("POST /purchases", salesAndAdmin(http.HandlerFunc(purchaseHandler.Create)))
 	protectedMux.Handle("GET /purchases", salesAndAdmin(http.HandlerFunc(purchaseHandler.List)))
 	protectedMux.Handle("GET /purchases/{id}", salesAndAdmin(http.HandlerFunc(purchaseHandler.Get)))
+	protectedMux.Handle("PUT /purchases/{id}", salesAndAdmin(http.HandlerFunc(purchaseHandler.Update)))
 
 	// Wire email receipt dependencies (Google Sheets bank-receipt ingestion)
 	emailRepo := repository.NewSQLEmailReceiptRepository(database.DB)
