@@ -49,6 +49,57 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/dashboard/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns executive KPIs, sales timeline, payment method breakdown, top products, category distribution, purchases vs sales, and inventory stock alerts. Requires the ayurami-admin or ayurami-salesperson role.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard"
+                ],
+                "summary": "Get aggregated dashboard stats",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start date filter (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date filter (YYYY-MM-DD)",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.DashboardStats"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request: invalid date format",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/email-receipts": {
             "get": {
                 "security": [
@@ -1671,6 +1722,23 @@ const docTemplate = `{
                 }
             }
         },
+        "models.CategoryEntry": {
+            "type": "object",
+            "properties": {
+                "categoryId": {
+                    "type": "integer"
+                },
+                "categoryName": {
+                    "type": "string"
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "totalRevenue": {
+                    "type": "number"
+                }
+            }
+        },
         "models.DailyRevenueBucket": {
             "type": "object",
             "properties": {
@@ -1682,6 +1750,73 @@ const docTemplate = `{
                 },
                 "date": {
                     "type": "string"
+                }
+            }
+        },
+        "models.DashboardKPIs": {
+            "type": "object",
+            "properties": {
+                "activeUsers": {
+                    "type": "integer"
+                },
+                "averageTicket": {
+                    "type": "number"
+                },
+                "lowStockProducts": {
+                    "type": "integer"
+                },
+                "monthPurchasesTotal": {
+                    "type": "number"
+                },
+                "todayRevenue": {
+                    "type": "number"
+                },
+                "todayTransactions": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.DashboardStats": {
+            "type": "object",
+            "properties": {
+                "categoryBreakdown": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.CategoryEntry"
+                    }
+                },
+                "inventoryAlerts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.InventoryAlertEntry"
+                    }
+                },
+                "kpis": {
+                    "$ref": "#/definitions/models.DashboardKPIs"
+                },
+                "paymentMethodBreakdown": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.PaymentMethodEntry"
+                    }
+                },
+                "purchasesVsSales": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.PurchasesVsSalesEntry"
+                    }
+                },
+                "salesTimeline": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.SalesTimelineEntry"
+                    }
+                },
+                "topProducts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TopProductEntry"
+                    }
                 }
             }
         },
@@ -1754,6 +1889,26 @@ const docTemplate = `{
                 }
             }
         },
+        "models.InventoryAlertEntry": {
+            "type": "object",
+            "properties": {
+                "currentStock": {
+                    "type": "number"
+                },
+                "minimumStock": {
+                    "type": "number"
+                },
+                "productId": {
+                    "type": "integer"
+                },
+                "productName": {
+                    "type": "string"
+                },
+                "unit": {
+                    "type": "string"
+                }
+            }
+        },
         "models.PaginatedSalesResponse": {
             "type": "object",
             "properties": {
@@ -1768,6 +1923,20 @@ const docTemplate = `{
                 },
                 "summary": {
                     "$ref": "#/definitions/models.SaleSummaryStats"
+                }
+            }
+        },
+        "models.PaymentMethodEntry": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number"
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "method": {
+                    "type": "string"
                 }
             }
         },
@@ -1937,6 +2106,20 @@ const docTemplate = `{
                 }
             }
         },
+        "models.PurchasesVsSalesEntry": {
+            "type": "object",
+            "properties": {
+                "month": {
+                    "type": "string"
+                },
+                "purchases": {
+                    "type": "number"
+                },
+                "sales": {
+                    "type": "number"
+                }
+            }
+        },
         "models.RevenueSummary": {
             "type": "object",
             "properties": {
@@ -2071,6 +2254,20 @@ const docTemplate = `{
                 }
             }
         },
+        "models.SalesTimelineEntry": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "revenue": {
+                    "type": "number"
+                }
+            }
+        },
         "models.Supplier": {
             "type": "object",
             "properties": {
@@ -2105,6 +2302,23 @@ const docTemplate = `{
                 "taxId": {
                     "description": "TaxID is the tax identifier (e.g. NIT/Cédula) (Spanish: NIT o Cédula).",
                     "type": "string"
+                }
+            }
+        },
+        "models.TopProductEntry": {
+            "type": "object",
+            "properties": {
+                "productId": {
+                    "type": "integer"
+                },
+                "productName": {
+                    "type": "string"
+                },
+                "totalQuantity": {
+                    "type": "number"
+                },
+                "totalRevenue": {
+                    "type": "number"
                 }
             }
         },

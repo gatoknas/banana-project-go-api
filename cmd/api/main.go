@@ -274,6 +274,13 @@ func setupRouter(logger *zap.Logger) http.Handler {
 		startEmailSyncScheduler(emailService, logger)
 	}
 
+	// Wire dashboard dependencies
+	dashboardRepo := repository.NewSQLDashboardRepository(database.DB)
+	dashboardService := service.NewDashboardService(dashboardRepo)
+	dashboardHandler := handlers.NewDashboardHandler(dashboardService, logger)
+
+	protectedMux.Handle("GET /dashboard/stats", salesAndAdmin(http.HandlerFunc(dashboardHandler.GetStats)))
+
 	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", middleware.RequireAuth(protectedMux)))
 
 	return mux
