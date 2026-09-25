@@ -126,6 +126,17 @@ definitions:
           (Spanish: Número de Transacción).'
         type: string
     type: object
+  models.PaginatedSalesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.Sale'
+        type: array
+      pagination:
+        $ref: '#/definitions/models.SalePagination'
+      summary:
+        $ref: '#/definitions/models.SaleSummaryStats'
+    type: object
   models.Product:
     properties:
       averageCost:
@@ -291,6 +302,89 @@ definitions:
       totalRevenue:
         type: number
       transactionCount:
+        type: integer
+    type: object
+  models.Sale:
+    properties:
+      createdAt:
+        description: 'CreatedAt is the creation timestamp (Spanish: Creado En).'
+        type: string
+      details:
+        description: 'Details is the list of line items in this sale (Spanish: Detalles
+          de Venta).'
+        items:
+          $ref: '#/definitions/models.SaleDetail'
+        type: array
+      id:
+        description: 'ID is the unique identifier (Spanish: ID).'
+        type: integer
+      itemsCount:
+        description: 'ItemsCount is the total number of distinct line items in the
+          sale (Spanish: Cantidad de Ítems).'
+        type: integer
+      paymentMethod:
+        description: 'PaymentMethod is the checkout method (e.g. Cash, Card) (Spanish:
+          Método de Pago).'
+        type: string
+      saleDate:
+        description: 'SaleDate is when the checkout occurred (Spanish: Fecha de Venta).'
+        type: string
+      totalAmount:
+        description: 'TotalAmount is the final total net amount received (Spanish:
+          Total de la Venta).'
+        type: number
+      userId:
+        description: 'UserID is the reference ID of the cashier who sold it (Spanish:
+          ID Usuario).'
+        type: integer
+      userName:
+        description: 'UserName is the name of the cashier / user who registered the
+          sale (Spanish: Nombre Usuario).'
+        type: string
+    type: object
+  models.SaleDetail:
+    properties:
+      historicalUnitPrice:
+        description: 'HistoricalUnitPrice is the unit price at the time of sale (Spanish:
+          Precio Unitario Histórico).'
+        type: number
+      id:
+        description: 'ID is the unique identifier (Spanish: ID).'
+        type: integer
+      productId:
+        description: 'ProductID is the principal sold product ID (Spanish: ID Producto).'
+        type: integer
+      productName:
+        description: 'ProductName is the name of the sold product (Spanish: Nombre
+          Producto).'
+        type: string
+      quantity:
+        description: 'Quantity is the amount sold, supports decimals for weighed items
+          (Spanish: Cantidad).'
+        type: number
+      saleId:
+        description: 'SaleID is the parent sale header ID (Spanish: ID Venta).'
+        type: integer
+      subtotal:
+        description: 'Subtotal is quantity * HistoricalUnitPrice (Spanish: Subtotal).'
+        type: number
+    type: object
+  models.SalePagination:
+    properties:
+      page:
+        type: integer
+      pageSize:
+        type: integer
+      totalItems:
+        type: integer
+      totalPages:
+        type: integer
+    type: object
+  models.SaleSummaryStats:
+    properties:
+      totalAmount:
+        type: number
+      totalCount:
         type: integer
     type: object
   models.Supplier:
@@ -921,6 +1015,55 @@ paths:
       tags:
       - purchases
   /api/v1/sales:
+    get:
+      description: Retrieves a paginated list of sales with optional filtering by
+        date range, payment method, and cashier. Requires the ayurami-admin or ayurami-salesperson
+        role.
+      parameters:
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 10, max 100)
+        in: query
+        name: pageSize
+        type: integer
+      - description: Start date filter (YYYY-MM-DD or RFC3339)
+        in: query
+        name: fromDate
+        type: string
+      - description: End date filter (YYYY-MM-DD or RFC3339)
+        in: query
+        name: toDate
+        type: string
+      - description: Filter by payment method (e.g. Cash, Card)
+        in: query
+        name: paymentMethod
+        type: string
+      - description: Filter by cashier user ID
+        in: query
+        name: userId
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.PaginatedSalesResponse'
+        "400":
+          description: 'Bad request: invalid filter parameters'
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List sales transactions
+      tags:
+      - sales
     post:
       consumes:
       - application/json
@@ -952,6 +1095,40 @@ paths:
       security:
       - BearerAuth: []
       summary: Create a new sale
+      tags:
+      - sales
+  /api/v1/sales/{id}:
+    get:
+      description: Retrieves full sale ticket details including itemized products
+        and prices. Requires the ayurami-admin or ayurami-salesperson role.
+      parameters:
+      - description: Sale ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Sale'
+        "400":
+          description: 'Bad request: invalid sale ID'
+          schema:
+            type: string
+        "404":
+          description: Sale not found
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get sale details by ID
       tags:
       - sales
   /api/v1/suppliers:

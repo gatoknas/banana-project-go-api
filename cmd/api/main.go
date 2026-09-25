@@ -186,6 +186,8 @@ func setupRouter(logger *zap.Logger) http.Handler {
 	saleHandler := handlers.NewSaleHandler(saleService, logger)
 
 	protectedMux.Handle("POST /sales", salesAndAdmin(http.HandlerFunc(saleHandler.Create)))
+	protectedMux.Handle("GET /sales", salesAndAdmin(http.HandlerFunc(saleHandler.List)))
+	protectedMux.Handle("GET /sales/{id}", salesAndAdmin(http.HandlerFunc(saleHandler.Get)))
 
 	// Wire product dependencies
 	productRepo := repository.NewSQLProductRepository(database.DB)
