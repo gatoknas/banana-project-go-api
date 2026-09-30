@@ -78,6 +78,9 @@ func main() {
 		logger.Warn("Failed to connect to database", zap.Error(err))
 	} else {
 		logger.Info("Successfully connected to the database")
+		if err := database.RunMigrations(database.DB, "db/migrations", logger); err != nil {
+			logger.Error("Failed to apply database migrations", zap.Error(err))
+		}
 		seedDefaultAdmin(database.DB, logger)
 		defer func() {
 			if err := database.Close(); err != nil {
@@ -101,7 +104,8 @@ func main() {
 	printBanner(env, port)
 
 	logger.Info("Server is starting", zap.String("port", port), zap.String("env", env))
-	corsRouter := middleware.CORS(router)
+	loggingRouter := middleware.RequestLogger(logger)(router)
+	corsRouter := middleware.CORS(loggingRouter)
 	if err := http.ListenAndServe(port, corsRouter); err != nil {
 		logger.Fatal("Could not start server", zap.Error(err))
 	}
@@ -110,12 +114,29 @@ func main() {
 // initLogger configures and returns a new zap.Logger based on the environment
 func initLogger(env string) (*zap.Logger, error) {
 	if env == "production" {
-		return zap.NewProduction()
+		prodConfig := zap.NewProductionConfig()
+		prodConfig.EncoderConfig.TimeKey = "timestamp"
+		prodConfig.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+		baseLogger, err := prodConfig.Build()
+		if err != nil {
+			return nil, err
+		}
+		return baseLogger.With(
+			zap.String("service", "banana-project-go-api"),
+			zap.String("env", env),
+		), nil
 	}
 	// Use a clean console development logger with colorized output for local debugging
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	return config.Build()
+	baseLogger, err := config.Build()
+	if err != nil {
+		return nil, err
+	}
+	return baseLogger.With(
+		zap.String("service", "banana-project-go-api"),
+		zap.String("env", env),
+	), nil
 }
 
 // setupRouter instantiates and wires services, repositories, handlers, and middlewares
