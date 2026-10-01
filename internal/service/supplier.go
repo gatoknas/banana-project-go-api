@@ -25,6 +25,7 @@ type SupplierRequest struct {
 	CompanyName string  `json:"companyName"`
 	ContactName *string `json:"contactName"`
 	Phone       *string `json:"phone"`
+	Address     *string `json:"address"`
 	Email       *string `json:"email"`
 	Description *string `json:"description"`
 }
@@ -74,11 +75,20 @@ func (s *SupplierService) CreateSupplier(ctx context.Context, req SupplierReques
 		}
 	}
 
+	var address *string
+	if req.Address != nil {
+		trimmed := strings.TrimSpace(*req.Address)
+		if trimmed != "" {
+			address = &trimmed
+		}
+	}
+
 	supplier := &models.Supplier{
 		TaxID:       taxID,
 		CompanyName: req.CompanyName,
 		ContactName: req.ContactName,
 		Phone:       req.Phone,
+		Address:     address,
 		Email:       req.Email,
 		Description: description,
 	}
@@ -147,12 +157,21 @@ func (s *SupplierService) UpdateSupplier(ctx context.Context, id int64, req Supp
 		}
 	}
 
+	var address *string
+	if req.Address != nil {
+		trimmed := strings.TrimSpace(*req.Address)
+		if trimmed != "" {
+			address = &trimmed
+		}
+	}
+
 	supplier := &models.Supplier{
 		ID:          id,
 		TaxID:       taxID,
 		CompanyName: req.CompanyName,
 		ContactName: req.ContactName,
 		Phone:       req.Phone,
+		Address:     address,
 		Email:       req.Email,
 		Description: description,
 	}

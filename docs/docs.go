@@ -948,7 +948,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Registers a new goods or ingredients provider. Requires the ayurami-admin role.",
+                "description": "Registers a new goods or ingredients provider. Phone and address may hold comma-separated multiple values. Requires the ayurami-admin role.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1055,7 +1055,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Modifies an existing supplier's details. Requires the ayurami-admin role.",
+                "description": "Modifies an existing supplier's details. Phone and address may hold comma-separated multiple values. Requires the ayurami-admin role.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2271,6 +2271,10 @@ const docTemplate = `{
         "models.Supplier": {
             "type": "object",
             "properties": {
+                "address": {
+                    "description": "Address is the supplier address(es), comma-separated when multiple (Spanish: Dirección).",
+                    "type": "string"
+                },
                 "companyName": {
                     "description": "CompanyName is the legal name of the business (Spanish: Razón Social).",
                     "type": "string"
@@ -2296,7 +2300,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "phone": {
-                    "description": "Phone is the contact number (Spanish: Teléfono).",
+                    "description": "Phone is the contact number(s), comma-separated when multiple (Spanish: Teléfono).",
                     "type": "string"
                 },
                 "taxId": {
@@ -2489,6 +2493,9 @@ const docTemplate = `{
         "service.SupplierRequest": {
             "type": "object",
             "properties": {
+                "address": {
+                    "type": "string"
+                },
                 "companyName": {
                     "type": "string"
                 },

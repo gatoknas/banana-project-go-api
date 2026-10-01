@@ -25,7 +25,7 @@ func NewSupplierHandler(s *service.SupplierService, logger *zap.Logger) *Supplie
 
 // Create handles POST /api/v1/suppliers
 // @Summary      Create a new supplier
-// @Description  Registers a new goods or ingredients provider. Requires the ayurami-admin role.
+// @Description  Registers a new goods or ingredients provider. Phone and address may hold comma-separated multiple values. Requires the ayurami-admin role.
 // @Tags         suppliers
 // @Accept       json
 // @Produce      json
@@ -144,7 +144,7 @@ func (h *SupplierHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // Update handles PUT /api/v1/suppliers/{id}
 // @Summary      Update a supplier
-// @Description  Modifies an existing supplier's details. Requires the ayurami-admin role.
+// @Description  Modifies an existing supplier's details. Phone and address may hold comma-separated multiple values. Requires the ayurami-admin role.
 // @Tags         suppliers
 // @Accept       json
 // @Produce      json

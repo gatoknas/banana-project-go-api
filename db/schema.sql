@@ -121,7 +121,8 @@ CREATE TABLE suppliers (
     tax_id VARCHAR(20) NULL UNIQUE, -- NIT/Cedula (optional)
     company_name VARCHAR(100) NOT NULL, -- Razon Social
     contact_name VARCHAR(100) NULL,
-    phone VARCHAR(20) NOT NULL,
+    phone VARCHAR(255) NOT NULL, -- comma-separated list supported
+    address VARCHAR(255) NULL, -- comma-separated list supported
     email VARCHAR(100) NULL,
     description TEXT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
