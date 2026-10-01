@@ -484,6 +484,10 @@ definitions:
     type: object
   models.Supplier:
     properties:
+      address:
+        description: 'Address is the supplier address(es), comma-separated when multiple
+          (Spanish: Dirección).'
+        type: string
       companyName:
         description: 'CompanyName is the legal name of the business (Spanish: Razón
           Social).'
@@ -507,7 +511,8 @@ definitions:
         description: 'ID is the unique identifier (Spanish: ID).'
         type: integer
       phone:
-        description: 'Phone is the contact number (Spanish: Teléfono).'
+        description: 'Phone is the contact number(s), comma-separated when multiple
+          (Spanish: Teléfono).'
         type: string
       taxId:
         description: 'TaxID is the tax identifier (e.g. NIT/Cédula) (Spanish: NIT
@@ -640,6 +645,8 @@ definitions:
     type: object
   service.SupplierRequest:
     properties:
+      address:
+        type: string
       companyName:
         type: string
       contactName:
@@ -1302,8 +1309,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Registers a new goods or ingredients provider. Requires the ayurami-admin
-        role.
+      description: Registers a new goods or ingredients provider. Phone and address
+        may hold comma-separated multiple values. Requires the ayurami-admin role.
       parameters:
       - description: Supplier Creation Payload
         in: body
@@ -1409,8 +1416,8 @@ paths:
     put:
       consumes:
       - application/json
-      description: Modifies an existing supplier's details. Requires the ayurami-admin
-        role.
+      description: Modifies an existing supplier's details. Phone and address may
+        hold comma-separated multiple values. Requires the ayurami-admin role.
       parameters:
       - description: Supplier ID
         in: path

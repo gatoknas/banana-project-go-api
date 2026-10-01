@@ -26,8 +26,10 @@ type Supplier struct {
 	CompanyName string `json:"companyName" db:"company_name"`
 	// ContactName is the provider contact representative (Spanish: Nombre de Contacto).
 	ContactName *string `json:"contactName" db:"contact_name"`
-	// Phone is the contact number (Spanish: Teléfono).
+	// Phone is the contact number(s), comma-separated when multiple (Spanish: Teléfono).
 	Phone *string `json:"phone" db:"phone"`
+	// Address is the supplier address(es), comma-separated when multiple (Spanish: Dirección).
+	Address *string `json:"address" db:"address"`
 	// Email is the contact email address (Spanish: Correo Electrónico).
 	Email *string `json:"email" db:"email"`
 	// Description represents additional notes or details about the supplier (Spanish: Descripción / Notas).

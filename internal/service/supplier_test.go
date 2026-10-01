@@ -152,6 +152,40 @@ func TestCreateSupplier(t *testing.T) {
 			},
 			expectErr: service.ErrTaxIDAlreadyExists,
 		},
+		{
+			name: "Success with address",
+			req: service.SupplierRequest{
+				CompanyName: "Distribuidora Frutas SAS",
+				Phone:       strPtr("+57 300 123 4567"),
+				Address:     strPtr("Cra 10 #20-30, Calle 5 #6-7"),
+			},
+			mockSetup: func(m *MockSupplierRepository) {
+				m.CreateFunc = func(ctx context.Context, tx *sql.Tx, s *models.Supplier) (int64, error) {
+					if s.Address == nil || *s.Address != "Cra 10 #20-30, Calle 5 #6-7" {
+						t.Errorf("expected address to be passed, got %v", s.Address)
+					}
+					return 1, nil
+				}
+			},
+			expectErr: nil,
+		},
+		{
+			name: "Blank address becomes nil",
+			req: service.SupplierRequest{
+				CompanyName: "Distribuidora Frutas SAS",
+				Phone:       strPtr("+57 300 123 4567"),
+				Address:     strPtr("   "),
+			},
+			mockSetup: func(m *MockSupplierRepository) {
+				m.CreateFunc = func(ctx context.Context, tx *sql.Tx, s *models.Supplier) (int64, error) {
+					if s.Address != nil {
+						t.Errorf("expected nil address, got %v", s.Address)
+					}
+					return 1, nil
+				}
+			},
+			expectErr: nil,
+		},
 	}
 
 	for _, tt := range tests {
@@ -402,6 +436,28 @@ func TestUpdateSupplier(t *testing.T) {
 				}
 			},
 			expectErr: service.ErrSupplierNotFound,
+		},
+		{
+			name: "Success update with address",
+			id:   1,
+			req: service.SupplierRequest{
+				TaxID:       strPtr("123"),
+				CompanyName: "Fruit Supplier New Name",
+				Phone:       strPtr("12345"),
+				Address:     strPtr("Av 1 #2-3, Barrio Centro"),
+			},
+			mockSetup: func(m *MockSupplierRepository) {
+				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Supplier, error) {
+					return existing, nil
+				}
+				m.UpdateFunc = func(ctx context.Context, s *models.Supplier) error {
+					if s.Address == nil || *s.Address != "Av 1 #2-3, Barrio Centro" {
+						t.Errorf("expected address to be updated, got %v", s.Address)
+					}
+					return nil
+				}
+			},
+			expectErr: nil,
 		},
 	}
 

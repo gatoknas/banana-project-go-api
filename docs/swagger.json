@@ -942,7 +942,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Registers a new goods or ingredients provider. Requires the ayurami-admin role.",
+                "description": "Registers a new goods or ingredients provider. Phone and address may hold comma-separated multiple values. Requires the ayurami-admin role.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1049,7 +1049,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Modifies an existing supplier's details. Requires the ayurami-admin role.",
+                "description": "Modifies an existing supplier's details. Phone and address may hold comma-separated multiple values. Requires the ayurami-admin role.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2265,6 +2265,10 @@
         "models.Supplier": {
             "type": "object",
             "properties": {
+                "address": {
+                    "description": "Address is the supplier address(es), comma-separated when multiple (Spanish: Dirección).",
+                    "type": "string"
+                },
                 "companyName": {
                     "description": "CompanyName is the legal name of the business (Spanish: Razón Social).",
                     "type": "string"
@@ -2290,7 +2294,7 @@
                     "type": "integer"
                 },
                 "phone": {
-                    "description": "Phone is the contact number (Spanish: Teléfono).",
+                    "description": "Phone is the contact number(s), comma-separated when multiple (Spanish: Teléfono).",
                     "type": "string"
                 },
                 "taxId": {
@@ -2483,6 +2487,9 @@
         "service.SupplierRequest": {
             "type": "object",
             "properties": {
+                "address": {
+                    "type": "string"
+                },
                 "companyName": {
                     "type": "string"
                 },
