@@ -169,8 +169,7 @@ func (r *SQLEmailReceiptRepository) GetRevenueSummary(ctx context.Context, from,
 		COUNT(CASE WHEN COALESCE(transaction_date, received_at) >= $1 AND COALESCE(transaction_date, received_at) < $2 THEN 1 END),
 		COALESCE(SUM(CASE WHEN COALESCE(transaction_date, received_at) >= $3 AND COALESCE(transaction_date, received_at) < $1 THEN amount ELSE 0 END), 0)
 		FROM email_receipts
-		WHERE status = 'imported'
-		  AND COALESCE(transaction_date, received_at) >= $3
+		WHERE COALESCE(transaction_date, received_at) >= $3
 		  AND COALESCE(transaction_date, received_at) < $2`
 
 	var (
@@ -215,8 +214,7 @@ func (r *SQLEmailReceiptRepository) GetRevenueSummary(ctx context.Context, from,
 		COALESCE(SUM(amount), 0),
 		COUNT(id)
 		FROM email_receipts
-		WHERE status = 'imported'
-		  AND COALESCE(transaction_date, received_at) >= $1
+		WHERE COALESCE(transaction_date, received_at) >= $1
 		  AND COALESCE(transaction_date, received_at) < $2
 		GROUP BY time_bucket
 		ORDER BY time_bucket ASC`, dateFormat)
