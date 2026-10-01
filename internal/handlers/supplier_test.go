@@ -135,6 +135,16 @@ func TestSupplierHandler_Create(t *testing.T) {
 			},
 			expectedStatus: http.StatusConflict,
 		},
+		{
+			name: "Unexpected create error 500",
+			body: `{"companyName": "Fruit Express", "phone": "+57 300 123"}`,
+			mockSetup: func(m *MockSupplierRepoForHandler) {
+				m.CreateFunc = func(ctx context.Context, tx *sql.Tx, s *models.Supplier) (int64, error) {
+					return 0, errors.New("db down")
+				}
+			},
+			expectedStatus: http.StatusInternalServerError,
+		},
 	}
 
 	for _, tt := range tests {
@@ -257,6 +267,16 @@ func TestSupplierHandler_Get(t *testing.T) {
 			},
 			expectedStatus: http.StatusNotFound,
 		},
+		{
+			name: "Database error 500",
+			id:   "1",
+			mockSetup: func(m *MockSupplierRepoForHandler) {
+				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Supplier, error) {
+					return nil, errors.New("db down")
+				}
+			},
+			expectedStatus: http.StatusInternalServerError,
+		},
 	}
 
 	for _, tt := range tests {
@@ -347,6 +367,27 @@ func TestSupplierHandler_Update(t *testing.T) {
 			},
 			expectedStatus: http.StatusNotFound,
 		},
+		{
+			name:           "Invalid JSON payload 400",
+			id:             "1",
+			body:           `{invalid-json}`,
+			mockSetup:      func(m *MockSupplierRepoForHandler) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "Tax ID conflict 409",
+			id:   "1",
+			body: `{"taxId": "222", "companyName": "Updated Supplier", "phone": "+57 300 123"}`,
+			mockSetup: func(m *MockSupplierRepoForHandler) {
+				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Supplier, error) {
+					return existing, nil
+				}
+				m.GetByTaxIDFunc = func(ctx context.Context, taxID string) (*models.Supplier, error) {
+					return &models.Supplier{ID: 2, TaxID: strPtr("222")}, nil
+				}
+			},
+			expectedStatus: http.StatusConflict,
+		},
 	}
 
 	for _, tt := range tests {
@@ -418,6 +459,22 @@ func TestSupplierHandler_Delete(t *testing.T) {
 				}
 			},
 			expectedStatus: http.StatusNotFound,
+		},
+		{
+			name:           "Invalid ID 400",
+			id:             "abc",
+			mockSetup:      func(m *MockSupplierRepoForHandler) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "Database error 500",
+			id:   "1",
+			mockSetup: func(m *MockSupplierRepoForHandler) {
+				m.GetByIDFunc = func(ctx context.Context, id int64) (*models.Supplier, error) {
+					return nil, errors.New("db down")
+				}
+			},
+			expectedStatus: http.StatusInternalServerError,
 		},
 	}
 
