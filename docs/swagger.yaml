@@ -100,6 +100,10 @@ definitions:
         items:
           $ref: '#/definitions/models.CategoryEntry'
         type: array
+      incomeVsPurchasesChart:
+        items:
+          $ref: '#/definitions/models.IncomeVsPurchasesChartEntry'
+        type: array
       inventoryAlerts:
         items:
           $ref: '#/definitions/models.InventoryAlertEntry'
@@ -180,6 +184,15 @@ definitions:
         description: 'TransactionNumber is the unique transaction id from the bank
           (Spanish: Número de Transacción).'
         type: string
+    type: object
+  models.IncomeVsPurchasesChartEntry:
+    properties:
+      date:
+        type: string
+      incomeAmount:
+        type: number
+      purchaseAmount:
+        type: number
     type: object
   models.InventoryAlertEntry:
     properties:
@@ -785,8 +798,8 @@ paths:
   /api/v1/email-receipts/summary:
     get:
       description: Calculates total revenue, transaction counts, average ticket, period-over-period
-        growth, and daily timeline buckets from email receipts. Requires ayurami-admin
-        or ayurami-salesperson role.
+        growth, and timeline buckets (hourly, daily, or monthly) from email receipts.
+        Requires ayurami-admin or ayurami-salesperson role.
       parameters:
       - description: Start date (YYYY-MM-DD, inclusive)
         in: query
@@ -795,6 +808,14 @@ paths:
       - description: End date (YYYY-MM-DD, inclusive)
         in: query
         name: to
+        type: string
+      - description: Timeline bucket interval (hour, day, month)
+        enum:
+        - hour
+        - day
+        - month
+        in: query
+        name: interval
         type: string
       produces:
       - application/json

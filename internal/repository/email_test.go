@@ -22,16 +22,19 @@ func TestSQLEmailReceiptRepository_GetRevenueSummary(t *testing.T) {
 		mockExpect    func(mock sqlmock.Sqlmock)
 		from          time.Time
 		to            time.Time
+		interval      string
 		wantRevenue   float64
 		wantCount     int
 		wantGrowth    float64
 		wantAvgTicket float64
+		wantMinSlots  int
 		wantErr       bool
 	}{
 		{
-			name: "success with revenue and growth",
-			from: from,
-			to:   to,
+			name:     "success with revenue and growth default interval",
+			from:     from,
+			to:       to,
+			interval: "day",
 			mockExpect: func(mock sqlmock.Sqlmock) {
 				summaryRows := sqlmock.NewRows([]string{"cur_rev", "cur_count", "prev_rev"}).
 					AddRow(100000.0, 5, 80000.0)
@@ -53,9 +56,61 @@ func TestSQLEmailReceiptRepository_GetRevenueSummary(t *testing.T) {
 			wantErr:       false,
 		},
 		{
-			name: "zero previous revenue gives 100 percent growth",
-			from: from,
-			to:   to,
+			name:     "success with hourly interval covers 06 to 19",
+			from:     from,
+			to:       to,
+			interval: "hour",
+			mockExpect: func(mock sqlmock.Sqlmock) {
+				summaryRows := sqlmock.NewRows([]string{"cur_rev", "cur_count", "prev_rev"}).
+					AddRow(50000.0, 2, 0.0)
+				mock.ExpectQuery(regexp.QuoteMeta("SELECT")).
+					WithArgs(from, to, from.Add(-to.Sub(from))).
+					WillReturnRows(summaryRows)
+
+				timelineRows := sqlmock.NewRows([]string{"time_bucket", "amount", "count"}).
+					AddRow("08:00", 20000.0, 1).
+					AddRow("14:00", 30000.0, 1)
+				mock.ExpectQuery(regexp.QuoteMeta("SELECT")).
+					WithArgs(from, to).
+					WillReturnRows(timelineRows)
+			},
+			wantRevenue:   50000.0,
+			wantCount:     2,
+			wantGrowth:    100.0,
+			wantAvgTicket: 25000.0,
+			wantMinSlots:  14, // 06:00 to 19:00 inclusive = 14 slots
+			wantErr:       false,
+		},
+		{
+			name:     "success with monthly interval",
+			from:     from,
+			to:       to,
+			interval: "month",
+			mockExpect: func(mock sqlmock.Sqlmock) {
+				summaryRows := sqlmock.NewRows([]string{"cur_rev", "cur_count", "prev_rev"}).
+					AddRow(75000.0, 3, 50000.0)
+				mock.ExpectQuery(regexp.QuoteMeta("SELECT")).
+					WithArgs(from, to, from.Add(-to.Sub(from))).
+					WillReturnRows(summaryRows)
+
+				timelineRows := sqlmock.NewRows([]string{"time_bucket", "amount", "count"}).
+					AddRow("2026-08", 35000.0, 1).
+					AddRow("2026-09", 40000.0, 2)
+				mock.ExpectQuery(regexp.QuoteMeta("SELECT")).
+					WithArgs(from, to).
+					WillReturnRows(timelineRows)
+			},
+			wantRevenue:   75000.0,
+			wantCount:     3,
+			wantGrowth:    50.0,
+			wantAvgTicket: 25000.0,
+			wantErr:       false,
+		},
+		{
+			name:     "zero previous revenue gives 100 percent growth",
+			from:     from,
+			to:       to,
+			interval: "day",
 			mockExpect: func(mock sqlmock.Sqlmock) {
 				summaryRows := sqlmock.NewRows([]string{"cur_rev", "cur_count", "prev_rev"}).
 					AddRow(50000.0, 2, 0.0)
@@ -76,9 +131,10 @@ func TestSQLEmailReceiptRepository_GetRevenueSummary(t *testing.T) {
 			wantErr:       false,
 		},
 		{
-			name: "error querying summary",
-			from: from,
-			to:   to,
+			name:     "error querying summary",
+			from:     from,
+			to:       to,
+			interval: "day",
 			mockExpect: func(mock sqlmock.Sqlmock) {
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT")).
 					WithArgs(from, to, from.Add(-to.Sub(from))).
@@ -87,9 +143,10 @@ func TestSQLEmailReceiptRepository_GetRevenueSummary(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "error querying timeline",
-			from: from,
-			to:   to,
+			name:     "error querying timeline",
+			from:     from,
+			to:       to,
+			interval: "day",
 			mockExpect: func(mock sqlmock.Sqlmock) {
 				summaryRows := sqlmock.NewRows([]string{"cur_rev", "cur_count", "prev_rev"}).
 					AddRow(50000.0, 2, 50000.0)
@@ -116,7 +173,7 @@ func TestSQLEmailReceiptRepository_GetRevenueSummary(t *testing.T) {
 			tt.mockExpect(mock)
 
 			repo := repository.NewSQLEmailReceiptRepository(db)
-			res, err := repo.GetRevenueSummary(context.Background(), tt.from, tt.to)
+			res, err := repo.GetRevenueSummary(context.Background(), tt.from, tt.to, tt.interval)
 
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("GetRevenueSummary() error = %v, wantErr %v", err, tt.wantErr)
@@ -133,6 +190,9 @@ func TestSQLEmailReceiptRepository_GetRevenueSummary(t *testing.T) {
 				}
 				if res.AverageTicket != tt.wantAvgTicket {
 					t.Errorf("got AverageTicket %v, want %v", res.AverageTicket, tt.wantAvgTicket)
+				}
+				if tt.wantMinSlots > 0 && len(res.Timeline) < tt.wantMinSlots {
+					t.Errorf("got len(Timeline) %d, want at least %d", len(res.Timeline), tt.wantMinSlots)
 				}
 			}
 

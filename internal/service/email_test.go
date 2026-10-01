@@ -18,7 +18,7 @@ type MockEmailReceiptRepo struct {
 	ListFunc              func(ctx context.Context, from, to *time.Time) ([]models.EmailReceipt, error)
 	GetByIDFunc           func(ctx context.Context, id int64) (*models.EmailReceipt, error)
 	GetByMessageIDFunc    func(ctx context.Context, messageID string) (*models.EmailReceipt, error)
-	GetRevenueSummaryFunc func(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error)
+	GetRevenueSummaryFunc func(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error)
 }
 
 func (m *MockEmailReceiptRepo) UpsertByMessageID(ctx context.Context, r *models.EmailReceipt) (bool, error) {
@@ -49,9 +49,9 @@ func (m *MockEmailReceiptRepo) GetByMessageID(ctx context.Context, messageID str
 	return nil, nil
 }
 
-func (m *MockEmailReceiptRepo) GetRevenueSummary(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error) {
+func (m *MockEmailReceiptRepo) GetRevenueSummary(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error) {
 	if m.GetRevenueSummaryFunc != nil {
-		return m.GetRevenueSummaryFunc(ctx, from, to)
+		return m.GetRevenueSummaryFunc(ctx, from, to, interval)
 	}
 	return nil, nil
 }
@@ -295,13 +295,14 @@ func TestEmailReceiptService_GetRevenueSummary(t *testing.T) {
 		mockRepo    *MockEmailReceiptRepo
 		from        *time.Time
 		to          *time.Time
+		interval    string
 		wantRevenue float64
 		wantErr     bool
 	}{
 		{
 			name: "custom valid range success",
 			mockRepo: &MockEmailReceiptRepo{
-				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error) {
+				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error) {
 					return &models.RevenueSummary{
 						TotalRevenue:     125000.0,
 						TransactionCount: 4,
@@ -311,13 +312,31 @@ func TestEmailReceiptService_GetRevenueSummary(t *testing.T) {
 			},
 			from:        &validFrom,
 			to:          &validTo,
+			interval:    "day",
 			wantRevenue: 125000.0,
+			wantErr:     false,
+		},
+		{
+			name: "hourly interval success",
+			mockRepo: &MockEmailReceiptRepo{
+				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error) {
+					return &models.RevenueSummary{
+						TotalRevenue:     30000.0,
+						TransactionCount: 1,
+						Currency:         "COP",
+					}, nil
+				},
+			},
+			from:        &validFrom,
+			to:          &validTo,
+			interval:    "hour",
+			wantRevenue: 30000.0,
 			wantErr:     false,
 		},
 		{
 			name: "default nil range success",
 			mockRepo: &MockEmailReceiptRepo{
-				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error) {
+				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error) {
 					return &models.RevenueSummary{
 						TotalRevenue:     50000.0,
 						TransactionCount: 1,
@@ -327,6 +346,7 @@ func TestEmailReceiptService_GetRevenueSummary(t *testing.T) {
 			},
 			from:        nil,
 			to:          nil,
+			interval:    "",
 			wantRevenue: 50000.0,
 			wantErr:     false,
 		},
@@ -335,25 +355,27 @@ func TestEmailReceiptService_GetRevenueSummary(t *testing.T) {
 			mockRepo: &MockEmailReceiptRepo{},
 			from:     &invalidFrom,
 			to:       &invalidTo,
+			interval: "day",
 			wantErr:  true,
 		},
 		{
 			name: "repo error returns error",
 			mockRepo: &MockEmailReceiptRepo{
-				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error) {
+				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error) {
 					return nil, errors.New("db query failed")
 				},
 			},
-			from:    &validFrom,
-			to:      &validTo,
-			wantErr: true,
+			from:     &validFrom,
+			to:       &validTo,
+			interval: "day",
+			wantErr:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := service.NewEmailReceiptService(tt.mockRepo, nil, "sheet-id", "Datos_Ventas", 50, logger)
-			res, err := svc.GetRevenueSummary(context.Background(), tt.from, tt.to)
+			res, err := svc.GetRevenueSummary(context.Background(), tt.from, tt.to, tt.interval)
 
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("GetRevenueSummary() error = %v, wantErr %v", err, tt.wantErr)

@@ -122,15 +122,16 @@ func (h *EmailReceiptHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // Summary handles GET /api/v1/email-receipts/summary
 // @Summary      Get revenue summary and analytics
-// @Description  Calculates total revenue, transaction counts, average ticket, period-over-period growth, and daily timeline buckets from email receipts. Requires ayurami-admin or ayurami-salesperson role.
+// @Description  Calculates total revenue, transaction counts, average ticket, period-over-period growth, and timeline buckets (hourly, daily, or monthly) from email receipts. Requires ayurami-admin or ayurami-salesperson role.
 // @Tags         email-receipts
 // @Produce      json
 // @Security     BearerAuth
-// @Param        from  query     string  false  "Start date (YYYY-MM-DD, inclusive)"
-// @Param        to    query     string  false  "End date (YYYY-MM-DD, inclusive)"
-// @Success      200   {object}  models.RevenueSummary
-// @Failure      400   {string}  string "Bad request: invalid date or date range"
-// @Failure      500   {string}  string "Internal server error"
+// @Param        from      query     string  false  "Start date (YYYY-MM-DD, inclusive)"
+// @Param        to        query     string  false  "End date (YYYY-MM-DD, inclusive)"
+// @Param        interval  query     string  false  "Timeline bucket interval (hour, day, month)" Enums(hour, day, month)
+// @Success      200       {object}  models.RevenueSummary
+// @Failure      400       {string}  string "Bad request: invalid date or date range"
+// @Failure      500       {string}  string "Internal server error"
 // @Router       /api/v1/email-receipts/summary [get]
 func (h *EmailReceiptHandler) Summary(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -154,7 +155,8 @@ func (h *EmailReceiptHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		to = &t
 	}
 
-	summary, err := h.service.GetRevenueSummary(ctx, from, to)
+	interval := strings.TrimSpace(r.URL.Query().Get("interval"))
+	summary, err := h.service.GetRevenueSummary(ctx, from, to, interval)
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid") {
 			h.logger.Warn("invalid revenue summary request", zap.Error(err))

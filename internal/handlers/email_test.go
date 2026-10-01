@@ -20,7 +20,7 @@ import (
 type MockEmailReceiptRepo struct {
 	UpsertByMessageIDFunc func(ctx context.Context, r *models.EmailReceipt) (bool, error)
 	ListFunc              func(ctx context.Context, from, to *time.Time) ([]models.EmailReceipt, error)
-	GetRevenueSummaryFunc func(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error)
+	GetRevenueSummaryFunc func(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error)
 }
 
 func (m *MockEmailReceiptRepo) UpsertByMessageID(ctx context.Context, r *models.EmailReceipt) (bool, error) {
@@ -37,9 +37,9 @@ func (m *MockEmailReceiptRepo) List(ctx context.Context, from, to *time.Time) ([
 	return nil, nil
 }
 
-func (m *MockEmailReceiptRepo) GetRevenueSummary(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error) {
+func (m *MockEmailReceiptRepo) GetRevenueSummary(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error) {
 	if m.GetRevenueSummaryFunc != nil {
-		return m.GetRevenueSummaryFunc(ctx, from, to)
+		return m.GetRevenueSummaryFunc(ctx, from, to, interval)
 	}
 	return nil, nil
 }
@@ -227,10 +227,10 @@ func TestEmailReceiptHandler_Summary(t *testing.T) {
 		wantRevenue float64
 	}{
 		{
-			name:  "summary success",
+			name:  "summary success default day interval",
 			query: "?from=2026-09-01&to=2026-09-24",
 			repo: &MockEmailReceiptRepo{
-				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error) {
+				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error) {
 					return &models.RevenueSummary{
 						TotalRevenue:     250000.0,
 						TransactionCount: 10,
@@ -240,6 +240,42 @@ func TestEmailReceiptHandler_Summary(t *testing.T) {
 			},
 			wantStatus:  http.StatusOK,
 			wantRevenue: 250000.0,
+		},
+		{
+			name:  "summary success with hourly interval",
+			query: "?from=2026-10-01&to=2026-10-01&interval=hour",
+			repo: &MockEmailReceiptRepo{
+				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error) {
+					if interval != "hour" {
+						return nil, errors.New("expected hour interval")
+					}
+					return &models.RevenueSummary{
+						TotalRevenue:     75000.0,
+						TransactionCount: 3,
+						Currency:         "COP",
+					}, nil
+				},
+			},
+			wantStatus:  http.StatusOK,
+			wantRevenue: 75000.0,
+		},
+		{
+			name:  "summary success with monthly interval",
+			query: "?from=2026-01-01&to=2026-09-30&interval=month",
+			repo: &MockEmailReceiptRepo{
+				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error) {
+					if interval != "month" {
+						return nil, errors.New("expected month interval")
+					}
+					return &models.RevenueSummary{
+						TotalRevenue:     900000.0,
+						TransactionCount: 45,
+						Currency:         "COP",
+					}, nil
+				},
+			},
+			wantStatus:  http.StatusOK,
+			wantRevenue: 900000.0,
 		},
 		{
 			name:       "invalid from date",
@@ -263,7 +299,7 @@ func TestEmailReceiptHandler_Summary(t *testing.T) {
 			name:  "internal error",
 			query: "?from=2026-09-01&to=2026-09-24",
 			repo: &MockEmailReceiptRepo{
-				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error) {
+				GetRevenueSummaryFunc: func(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error) {
 					return nil, errors.New("db error")
 				},
 			},

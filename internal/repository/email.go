@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"sort"
+	"strings"
 	"time"
 
 	"org.banana.project/api/internal/models"
@@ -17,8 +19,8 @@ type EmailReceiptRepository interface {
 	UpsertByMessageID(ctx context.Context, r *models.EmailReceipt) (bool, error)
 	// List returns receipts optionally filtered by a received_at range.
 	List(ctx context.Context, from, to *time.Time) ([]models.EmailReceipt, error)
-	// GetRevenueSummary returns aggregated revenue metrics and daily timeline buckets for the given date range.
-	GetRevenueSummary(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error)
+	// GetRevenueSummary returns aggregated revenue metrics and hourly/daily/monthly timeline buckets for the given date range.
+	GetRevenueSummary(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error)
 }
 
 type SQLEmailReceiptRepository struct {
@@ -158,7 +160,7 @@ func (r *SQLEmailReceiptRepository) List(ctx context.Context, from, to *time.Tim
 	return receipts, nil
 }
 
-func (r *SQLEmailReceiptRepository) GetRevenueSummary(ctx context.Context, from, to time.Time) (*models.RevenueSummary, error) {
+func (r *SQLEmailReceiptRepository) GetRevenueSummary(ctx context.Context, from, to time.Time, interval string) (*models.RevenueSummary, error) {
 	duration := to.Sub(from)
 	prevFrom := from.Add(-duration)
 
@@ -198,16 +200,26 @@ func (r *SQLEmailReceiptRepository) GetRevenueSummary(ctx context.Context, from,
 		growthPercentage = 100.0
 	}
 
-	timelineQuery := `SELECT 
-		TO_CHAR(COALESCE(transaction_date, received_at) AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS day_date,
+	var dateFormat string
+	switch strings.ToLower(interval) {
+	case "hour":
+		dateFormat = "HH24:00"
+	case "month":
+		dateFormat = "YYYY-MM"
+	default:
+		dateFormat = "YYYY-MM-DD"
+	}
+
+	timelineQuery := fmt.Sprintf(`SELECT 
+		TO_CHAR(COALESCE(transaction_date, received_at) AT TIME ZONE 'America/Bogota', '%s') AS time_bucket,
 		COALESCE(SUM(amount), 0),
 		COUNT(id)
 		FROM email_receipts
 		WHERE status = 'imported'
 		  AND COALESCE(transaction_date, received_at) >= $1
 		  AND COALESCE(transaction_date, received_at) < $2
-		GROUP BY day_date
-		ORDER BY day_date ASC`
+		GROUP BY time_bucket
+		ORDER BY time_bucket ASC`, dateFormat)
 
 	rows, err := r.db.QueryContext(ctx, timelineQuery, from, to)
 	if err != nil {
@@ -225,6 +237,41 @@ func (r *SQLEmailReceiptRepository) GetRevenueSummary(ctx context.Context, from,
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("timeline rows error: %w", err)
+	}
+
+	if strings.ToLower(interval) == "hour" {
+		hourMap := make(map[string]*models.DailyRevenueBucket)
+		for h := 6; h <= 19; h++ {
+			slot := fmt.Sprintf("%02d:00", h)
+			hourMap[slot] = &models.DailyRevenueBucket{
+				Date:   slot,
+				Amount: 0,
+				Count:  0,
+			}
+		}
+		for _, b := range timeline {
+			if existing, ok := hourMap[b.Date]; ok {
+				existing.Amount = b.Amount
+				existing.Count = b.Count
+			} else {
+				hourMap[b.Date] = &models.DailyRevenueBucket{
+					Date:   b.Date,
+					Amount: b.Amount,
+					Count:  b.Count,
+				}
+			}
+		}
+		allHours := make([]string, 0, len(hourMap))
+		for k := range hourMap {
+			allHours = append(allHours, k)
+		}
+		sort.Strings(allHours)
+
+		filledTimeline := make([]models.DailyRevenueBucket, 0, len(allHours))
+		for _, h := range allHours {
+			filledTimeline = append(filledTimeline, *hourMap[h])
+		}
+		timeline = filledTimeline
 	}
 
 	return &models.RevenueSummary{
