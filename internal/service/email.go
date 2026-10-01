@@ -159,9 +159,9 @@ func (s *EmailReceiptService) List(ctx context.Context, from, to *time.Time) ([]
 	return s.repo.List(ctx, from, to)
 }
 
-// GetRevenueSummary returns aggregated revenue metrics and daily timeline buckets.
+// GetRevenueSummary returns aggregated revenue metrics and hourly/daily/monthly timeline buckets.
 // If from or to are nil, it defaults to the current month in Colombia timezone.
-func (s *EmailReceiptService) GetRevenueSummary(ctx context.Context, from, to *time.Time) (*models.RevenueSummary, error) {
+func (s *EmailReceiptService) GetRevenueSummary(ctx context.Context, from, to *time.Time, interval string) (*models.RevenueSummary, error) {
 	now := time.Now().In(sheets.Colombia)
 
 	var start, end time.Time
@@ -181,7 +181,7 @@ func (s *EmailReceiptService) GetRevenueSummary(ctx context.Context, from, to *t
 		return nil, fmt.Errorf("invalid date range: 'from' must be strictly before 'to'")
 	}
 
-	return s.repo.GetRevenueSummary(ctx, start, end)
+	return s.repo.GetRevenueSummary(ctx, start, end, interval)
 }
 
 // parseDateRange converts two inclusive YYYY-MM-DD dates into a half-open

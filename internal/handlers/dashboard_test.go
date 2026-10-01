@@ -60,6 +60,13 @@ func (m *mockDashboardRepoForHandler) GetPurchasesVsSales(ctx context.Context, f
 	return []models.PurchasesVsSalesEntry{{Month: "2026-09", Purchases: 50000, Sales: 150000}}, nil
 }
 
+func (m *mockDashboardRepoForHandler) GetIncomeVsPurchasesChart(ctx context.Context, from, to time.Time) ([]models.IncomeVsPurchasesChartEntry, error) {
+	if m.fail {
+		return nil, errors.New("db error")
+	}
+	return []models.IncomeVsPurchasesChartEntry{{Date: "2026-09-25", IncomeAmount: 150000, PurchaseAmount: 50000}}, nil
+}
+
 func (m *mockDashboardRepoForHandler) GetInventoryAlerts(ctx context.Context, limit int) ([]models.InventoryAlertEntry, error) {
 	if m.fail {
 		return nil, errors.New("db error")

@@ -161,7 +161,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Calculates total revenue, transaction counts, average ticket, period-over-period growth, and daily timeline buckets from email receipts. Requires ayurami-admin or ayurami-salesperson role.",
+                "description": "Calculates total revenue, transaction counts, average ticket, period-over-period growth, and timeline buckets (hourly, daily, or monthly) from email receipts. Requires ayurami-admin or ayurami-salesperson role.",
                 "produces": [
                     "application/json"
                 ],
@@ -180,6 +180,17 @@ const docTemplate = `{
                         "type": "string",
                         "description": "End date (YYYY-MM-DD, inclusive)",
                         "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "hour",
+                            "day",
+                            "month"
+                        ],
+                        "type": "string",
+                        "description": "Timeline bucket interval (hour, day, month)",
+                        "name": "interval",
                         "in": "query"
                     }
                 ],
@@ -1785,6 +1796,12 @@ const docTemplate = `{
                         "$ref": "#/definitions/models.CategoryEntry"
                     }
                 },
+                "incomeVsPurchasesChart": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.IncomeVsPurchasesChartEntry"
+                    }
+                },
                 "inventoryAlerts": {
                     "type": "array",
                     "items": {
@@ -1886,6 +1903,20 @@ const docTemplate = `{
                 "transactionNumber": {
                     "description": "TransactionNumber is the unique transaction id from the bank (Spanish: Número de Transacción).",
                     "type": "string"
+                }
+            }
+        },
+        "models.IncomeVsPurchasesChartEntry": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "incomeAmount": {
+                    "type": "number"
+                },
+                "purchaseAmount": {
+                    "type": "number"
                 }
             }
         },
