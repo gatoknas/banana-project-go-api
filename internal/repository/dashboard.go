@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"sort"
 	"time"
 
 	"org.banana.project/api/internal/models"
@@ -15,6 +16,7 @@ type DashboardRepository interface {
 	GetTopProducts(ctx context.Context, from, to time.Time, limit int) ([]models.TopProductEntry, error)
 	GetCategoryBreakdown(ctx context.Context, from, to time.Time) ([]models.CategoryEntry, error)
 	GetPurchasesVsSales(ctx context.Context, fromMonth string) ([]models.PurchasesVsSalesEntry, error)
+	GetIncomeVsPurchasesChart(ctx context.Context, from, to time.Time) ([]models.IncomeVsPurchasesChartEntry, error)
 	GetInventoryAlerts(ctx context.Context, limit int) ([]models.InventoryAlertEntry, error)
 }
 
@@ -276,6 +278,101 @@ func (r *SQLDashboardRepository) GetPurchasesVsSales(ctx context.Context, fromMo
 			Month:     m,
 			Purchases: purchasesMap[m],
 			Sales:     salesMap[m],
+		})
+	}
+
+	return entries, nil
+}
+
+// GetIncomeVsPurchasesChart returns daily income from email receipts vs purchases for the given date range.
+func (r *SQLDashboardRepository) GetIncomeVsPurchasesChart(ctx context.Context, from, to time.Time) ([]models.IncomeVsPurchasesChartEntry, error) {
+	// Query income from email_receipts
+	incomeQuery := `
+		SELECT 
+			day,
+			SUM(COALESCE(amount, 0)) AS income
+		FROM (
+			SELECT 
+				COALESCE(transaction_date, received_at) AS day,
+				amount
+			FROM email_receipts
+		) AS sub
+		WHERE day >= $1 AND day < $2
+		GROUP BY day
+		ORDER BY day ASC`
+
+	incomeRows, err := r.db.QueryContext(ctx, incomeQuery, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer incomeRows.Close()
+
+	incomeMap := make(map[string]float64)
+	for incomeRows.Next() {
+		var day string
+		var inc float64
+		if err := incomeRows.Scan(&day, &inc); err != nil {
+			return nil, err
+		}
+		incomeMap[day] = inc
+	}
+	if err := incomeRows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Query purchase amounts from purchases
+	purchaseQuery := `
+		SELECT 
+			DATE(purchase_date) AS day,
+			COALESCE(SUM(total_amount), 0) AS purchase
+		FROM purchases
+		WHERE purchase_date >= $1 AND purchase_date < $2
+		GROUP BY day
+		ORDER BY day ASC`
+
+	purchaseRows, err := r.db.QueryContext(ctx, purchaseQuery, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer purchaseRows.Close()
+
+	purchaseMap := make(map[string]float64)
+	for purchaseRows.Next() {
+		var day string
+		var pur float64
+		if err := purchaseRows.Scan(&day, &pur); err != nil {
+			return nil, err
+		}
+		purchaseMap[day] = pur
+	}
+	if err := purchaseRows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Combine all unique days
+	daysSet := make(map[string]struct{})
+	for day := range incomeMap {
+		daysSet[day] = struct{}{}
+	}
+	for day := range purchaseMap {
+		daysSet[day] = struct{}{}
+	}
+
+	// Create a slice of days and sort it
+	var days []string
+	for day := range daysSet {
+		days = append(days, day)
+	}
+	// Sort the days (they are in YYYY-MM-DD format, so lexicographic sort works)
+	sort.Strings(days)
+
+	// Build the result slice
+	entries := make([]models.IncomeVsPurchasesChartEntry, 0, len(days))
+	for _, day := range days {
+		entries = append(entries, models.IncomeVsPurchasesChartEntry{
+			Date:         day,
+			IncomeAmount: incomeMap[day],
+			PurchaseAmount: purchaseMap[day],
 		})
 	}
 

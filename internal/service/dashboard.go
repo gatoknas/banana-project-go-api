@@ -92,6 +92,12 @@ func (s *DashboardService) GetDashboardStats(ctx context.Context, fromStr, toStr
 		return nil, err
 	}
 
+	// 8. Income vs Purchases Chart
+	incomeVsPurchasesChart, err := s.repo.GetIncomeVsPurchasesChart(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+
 	return &models.DashboardStats{
 		KPIs:                   kpis,
 		SalesTimeline:          salesTimeline,
@@ -99,6 +105,7 @@ func (s *DashboardService) GetDashboardStats(ctx context.Context, fromStr, toStr
 		TopProducts:            topProducts,
 		CategoryBreakdown:      categories,
 		PurchasesVsSales:       purchasesVsSales,
+		IncomeVsPurchasesChart: incomeVsPurchasesChart,
 		InventoryAlerts:        inventoryAlerts,
 	}, nil
 }

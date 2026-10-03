@@ -55,6 +55,13 @@ type PurchasesVsSalesEntry struct {
 	Sales     float64 `json:"sales"`
 }
 
+// IncomeVsPurchasesChartEntry represents daily income from email receipts vs purchases.
+type IncomeVsPurchasesChartEntry struct {
+	Date         string  `json:"date"`
+	IncomeAmount float64 `json:"incomeAmount"`
+	PurchaseAmount float64 `json:"purchaseAmount"`
+}
+
 // InventoryAlertEntry represents an inventory item requiring restocking attention.
 type InventoryAlertEntry struct {
 	ProductID    int64   `json:"productId"`
@@ -72,5 +79,6 @@ type DashboardStats struct {
 	TopProducts            []TopProductEntry       `json:"topProducts"`
 	CategoryBreakdown      []CategoryEntry         `json:"categoryBreakdown"`
 	PurchasesVsSales       []PurchasesVsSalesEntry `json:"purchasesVsSales"`
+	IncomeVsPurchasesChart []IncomeVsPurchasesChartEntry `json:"incomeVsPurchasesChart"`
 	InventoryAlerts        []InventoryAlertEntry   `json:"inventoryAlerts"`
 }
