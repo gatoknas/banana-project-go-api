@@ -121,4 +121,4 @@ Then every `git commit` runs the gate on staged files. It can be bypassed with `
 
 The floor is per changed file by default because the existing packages are far below 80% overall (`internal/handlers` is at 6.7%, `internal/service` at 10.9%). A package-scoped floor would block any edit to those packages until every file in them is tested.
 
-See `.kilo/command/tdt.md` for the one-keystroke flow and `.kilo/skills/go-master-api/SKILL.md` for the TDT mandate.
+See `.agents/skills/tdt/SKILL.md` for the one-keystroke flow, `.agents/skills/go-master-api/SKILL.md` for the TDT mandate, and `AGENT-TOOLING.md` for the Antigravity / KiloCode / OpenCode layout.
