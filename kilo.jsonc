@@ -1,0 +1,25 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "instructions": [".agents/rules/*.md"],
+  "mcp": {
+    "codegraph": {
+      "type": "local",
+      "command": ["codegraph", "serve", "--mcp"],
+      "cwd": "C:\\Users\\danie\\Documents\\SourceCode\\banana-project",
+      "enabled": true
+    },
+    "github": {
+      "type": "local",
+      "command": [
+        "C:\\Users\\danie\\go\\bin\\github-mcp-server.exe",
+        "stdio",
+        "--toolsets",
+        "issues,labels,projects,pull_requests,repos,users"
+      ],
+      "environment": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_PERSONAL_ACCESS_TOKEN}"
+      },
+      "enabled": true
+    }
+  }
+}

@@ -43,3 +43,14 @@ __pycache__/
 .kilo/plans/
 .kilo/worktrees/
 
+# Agent tooling transient state (auto-tests manifest)
+.agents/state/
+
+# Full-stack launcher PID files
+deploy/.api.pid
+deploy/.web.pid
+
+# Go profiling / coverage / delve debug artifacts
+$prof
+cover
+__debug_bin*

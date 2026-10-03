@@ -12,4 +12,4 @@ go run ./cmd/testgate -staged
 
 Do **not** bypass the gate with `git commit --no-verify`.
 
-See `.kilo/skills/go-master-api/SKILL.md` for the full TDT mandate and `.kilo/command/tdt.md` for the one-keystroke test-generation flow.
+See `.agents/skills/go-master-api/SKILL.md` for the full TDT mandate and `.agents/skills/tdt/SKILL.md` for the one-keystroke test-generation flow. Tool layout across Antigravity, KiloCode, and OpenCode is documented in `AGENT-TOOLING.md`.

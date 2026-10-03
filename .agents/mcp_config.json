@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "codegraph": {
+      "command": "codegraph",
+      "args": ["serve", "--mcp"],
+      "cwd": "C:\\Users\\danie\\Documents\\SourceCode\\banana-project"
+    },
+    "github": {
+      "command": "C:\\Users\\danie\\go\\bin\\github-mcp-server.exe",
+      "args": ["stdio", "--toolsets", "issues,labels,projects,pull_requests,repos,users"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    }
+  }
+}

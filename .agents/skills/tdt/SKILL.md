@@ -1,9 +1,9 @@
 ---
-description: Generate or refresh table-driven tests for the current diff and run the TDT gate
-agent: code
+name: tdt
+description: Generate or refresh table-driven Go unit tests for the current diff and run the TDT gate. Use when a Go handler, service, repository, function, helper, or endpoint was added or modified in banana-project-go-api.
 ---
 
-# /tdt — Table-Driven Test Flow
+# tdt — Table-Driven Test Flow
 
 Run this whenever you have added or modified a Go handler, service, repository, function, helper, or endpoint.
 

@@ -12,5 +12,27 @@
         ]
       }
     ]
+  },
+  "codegraph-auto-sync": {
+    "PostToolUse": [
+      {
+        "matcher": "replace_file_content|write_to_file|multi_replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c \"codegraph sync > NUL 2>&1 & echo {}\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "cmd /c \"codegraph sync > NUL 2>&1 & echo {}\"",
+        "timeout": 15
+      }
+    ]
   }
 }
+

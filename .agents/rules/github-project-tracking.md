@@ -1,3 +1,8 @@
+---
+trigger: always_on
+description: Mandatory issue-first / branch-first / PR-first workflow for all non-trivial work, tracked on GitHub Projects #6.
+---
+
 # GitHub Projects, Branching & Issue Tracking Rule (Go API)
 
 ## Mandate
