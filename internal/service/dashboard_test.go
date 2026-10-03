@@ -17,6 +17,7 @@ type mockDashboardRepo struct {
 	getCategoryBreakdownFn     func(ctx context.Context, from, to time.Time) ([]models.CategoryEntry, error)
 	getPurchasesVsSalesFn      func(ctx context.Context, fromMonth string) ([]models.PurchasesVsSalesEntry, error)
 	getInventoryAlertsFn       func(ctx context.Context, limit int) ([]models.InventoryAlertEntry, error)
+	getIncomeVsPurchasesChartFn func(ctx context.Context, from, to time.Time) ([]models.IncomeVsPurchasesChartEntry, error)
 }
 
 func (m *mockDashboardRepo) GetKPIs(ctx context.Context, now time.Time) (models.DashboardKPIs, error) {
@@ -66,6 +67,13 @@ func (m *mockDashboardRepo) GetInventoryAlerts(ctx context.Context, limit int) (
 		return m.getInventoryAlertsFn(ctx, limit)
 	}
 	return []models.InventoryAlertEntry{{ProductID: 1, ProductName: "Milk", CurrentStock: 1, MinimumStock: 5, Unit: "lt"}}, nil
+}
+
+func (m *mockDashboardRepo) GetIncomeVsPurchasesChart(ctx context.Context, from, to time.Time) ([]models.IncomeVsPurchasesChartEntry, error) {
+	if m.getIncomeVsPurchasesChartFn != nil {
+		return m.getIncomeVsPurchasesChartFn(ctx, from, to)
+	}
+	return []models.IncomeVsPurchasesChartEntry{{Date: "2026-09-01", IncomeAmount: 1000, PurchaseAmount: 500}}, nil
 }
 
 func TestDashboardService_GetDashboardStats(t *testing.T) {
@@ -199,9 +207,21 @@ func TestDashboardService_GetDashboardStats(t *testing.T) {
 			wantErr:   true,
 			errSubstr: "inventory alerts error",
 		},
+		{
+			name: "error from repository GetIncomeVsPurchasesChart",
+			repo: &mockDashboardRepo{
+				getIncomeVsPurchasesChartFn: func(ctx context.Context, from, to time.Time) ([]models.IncomeVsPurchasesChartEntry, error) {
+					return nil, errors.New("income vs purchases chart error")
+				},
+			},
+			fromStr:   "2026-09-01",
+			toStr:     "2026-09-25",
+			wantErr:   true,
+			errSubstr: "income vs purchases chart error",
+		},
 	}
 
-	for _, tt := range tests {
+		for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewDashboardService(tt.repo)
 			stats, err := svc.GetDashboardStats(context.Background(), tt.fromStr, tt.toStr)
@@ -216,6 +236,10 @@ func TestDashboardService_GetDashboardStats(t *testing.T) {
 				}
 				if len(stats.SalesTimeline) == 0 {
 					t.Errorf("expected sales timeline entries, got 0")
+				}
+				// Check that the new field is present (not nil)
+				if stats.IncomeVsPurchasesChart == nil {
+					t.Fatal("expected IncomeVsPurchasesChart to be non-nil")
 				}
 			}
 		})
